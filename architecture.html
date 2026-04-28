@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Operations Portal — Architecture</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; background: #020617; }
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes drawLine {
+      from { stroke-dashoffset: 2000; opacity: 0; }
+      to   { stroke-dashoffset: 0;    opacity: 0.85; }
+    }
+    @keyframes fadeLine {
+      from { opacity: 0; }
+      to   { opacity: 0.85; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    const VW = 900;
+    const VH = 478;
+
+    const N = {
+      db:       { cx: 225, cy: 100, w: 202, h: 52, label: 'Data Warehouse',       sub: 'Source Database',         fill: '#0c4a6e', stroke: '#0ea5e9', emoji: '🗄️' },
+      ds:       { cx: 225, cy: 215, w: 226, h: 52, label: 'Published Datasource', sub: 'Tableau Cloud',           fill: '#1e3a5f', stroke: '#60a5fa', emoji: '📊' },
+      dash:     { cx: 118, cy: 365, w: 180, h: 52, label: 'Tableau Dashboard',    sub: 'Embedded View',           fill: '#1e3a5f', stroke: '#818cf8', emoji: '📈' },
+      pulse:    { cx: 334, cy: 365, w: 180, h: 52, label: 'Tableau Pulse',        sub: 'Metric Digests',          fill: '#2d1b69', stroke: '#a78bfa', emoji: '⚡' },
+      app:      { cx: 680, cy: 100, w: 215, h: 56, label: 'Operations Portal',    sub: 'Node.js / Express',       fill: '#064e3b', stroke: '#34d399', emoji: '🌐' },
+      discover: { cx: 680, cy: 365, w: 215, h: 56, label: 'Pulse Discover',       sub: 'Insights Brief API',      fill: '#4a044e', stroke: '#c026d3', emoji: '🔍' },
+    };
+
+    const B = k => ({ x: N[k].cx,               y: N[k].cy + N[k].h / 2 });
+    const T = k => ({ x: N[k].cx,               y: N[k].cy - N[k].h / 2 });
+    const L = k => ({ x: N[k].cx - N[k].w / 2, y: N[k].cy });
+    const R = k => ({ x: N[k].cx + N[k].w / 2, y: N[k].cy });
+
+    const SY = 298;
+
+    const MARKERS = [
+      { id: 'ah-cyan',    color: '#38bdf8' },
+      { id: 'ah-indigo',  color: '#818cf8' },
+      { id: 'ah-purple',  color: '#a78bfa' },
+      { id: 'ah-green',   color: '#34d399' },
+      { id: 'ah-fuchsia', color: '#c026d3' },
+    ];
+
+    const ARROWS = [
+      {
+        id: 'db-ds',
+        d: `M ${B('db').x} ${B('db').y} L ${T('ds').x} ${T('ds').y}`,
+        color: '#38bdf8', marker: 'ah-cyan', label: 'ETL / Live Query', lx: 265, ly: 160, delay: 0.2,
+      },
+      {
+        id: 'ds-trunk',
+        d: `M ${B('ds').x} ${B('ds').y} L ${B('ds').x} ${SY}`,
+        color: '#60a5fa', noArrow: true, delay: 0.55,
+      },
+      {
+        id: 'ds-dash',
+        d: `M ${B('ds').x} ${SY} L ${T('dash').x} ${SY} L ${T('dash').x} ${T('dash').y}`,
+        color: '#818cf8', marker: 'ah-indigo', label: 'data', lx: 163, ly: 291, delay: 0.75,
+      },
+      {
+        id: 'ds-pulse',
+        d: `M ${B('ds').x} ${SY} L ${T('pulse').x} ${SY} L ${T('pulse').x} ${T('pulse').y}`,
+        color: '#a78bfa', marker: 'ah-purple', label: 'data', lx: 292, ly: 291, delay: 0.75,
+      },
+      {
+        id: 'app-discover',
+        d: `M ${B('app').x} ${B('app').y} L ${T('discover').x} ${T('discover').y}`,
+        color: '#34d399', marker: 'ah-green', label: 'Pulse Insights Brief API', lx: 758, ly: 230, delay: 0.3,
+      },
+      {
+        id: 'app-dash',
+        d: `M ${L('app').x} ${L('app').y} C 470 ${L('app').y} 470 ${R('dash').y} ${R('dash').x} ${R('dash').y}`,
+        color: '#34d399', marker: 'ah-green', dashed: true, label: 'JWT Embed / REST API', lx: 468, ly: 193, delay: 0.9,
+      },
+      {
+        id: 'discover-pulse',
+        d: `M ${L('discover').x} ${L('discover').y} L ${R('pulse').x} ${R('pulse').y}`,
+        color: '#c026d3', marker: 'ah-fuchsia', dashed: true, label: 'runs over', lx: 498, ly: 353, delay: 1.1,
+      },
+    ];
+
+    const NODE_ORDER = ['db', 'ds', 'dash', 'pulse', 'app', 'discover'];
+
+    const TIPS = {
+      db:       'Raw operational data (rentals, fleet, financials). Feeds Tableau via live connection or extract.',
+      ds:       'Tableau Published Datasource acts as the single source of truth for all downstream content.',
+      dash:     'Tableau viz embedded in the portal via Tableau Embedding API v3 + Connected App JWT.',
+      pulse:    'AI-powered metric digests. Pulse Discover runs on top of this layer, surfacing insights to the Portal via the Pulse Insights Brief API.',
+      app:      'Express server (server.js). Handles JWT minting, REST proxy, and the /ask endpoint. Calls Pulse Discover directly via the Pulse Insights Brief API.',
+      discover: 'Pulse Discover runs on top of Tableau Pulse. The Operations Portal accesses it via the Pulse Insights Brief API to retrieve metric insights and anomalies on demand.',
+    };
+
+    function ArchDiagram() {
+      const [hovered, setHovered] = useState(null);
+
+      return (
+        <div className="bg-slate-950 min-h-screen flex flex-col items-center justify-center p-4 gap-3">
+
+          {/* Header */}
+          <div className="text-center" style={{ animation: 'fadeInDown 0.45s ease forwards' }}>
+            <div style={{ marginBottom: '6px' }}>
+              <a
+                href="https://localhost:5500/"
+                style={{ color: '#64748b', fontSize: '12px', textDecoration: 'none', letterSpacing: '0.05em' }}
+              >
+                ← Back to Portal
+              </a>
+            </div>
+            <h1 className="text-white text-xl font-bold tracking-tight">Operations Portal — Architecture</h1>
+            <p className="text-slate-500 text-xs mt-1">
+              Hover any node for details &nbsp;·&nbsp; — solid = data flow &nbsp;·&nbsp; – – dashed = API / dependency
+            </p>
+          </div>
+
+          {/* Tooltip strip */}
+          <div
+            className="w-full max-w-5xl flex items-center justify-center"
+            style={{ minHeight: '32px', opacity: 0, animation: 'fadeIn 0.3s ease 1.4s forwards' }}
+          >
+            {hovered ? (
+              <div
+                className="px-4 py-1 rounded-lg text-xs text-center"
+                style={{
+                  background: N[hovered].fill,
+                  border: `1px solid ${N[hovered].stroke}`,
+                  color: '#e2e8f0',
+                  maxWidth: '520px',
+                  animation: 'fadeInUp 0.2s ease forwards',
+                }}
+              >
+                <span style={{ color: N[hovered].stroke, fontWeight: 600 }}>{N[hovered].label}: </span>
+                {TIPS[hovered]}
+              </div>
+            ) : (
+              <p className="text-slate-700 text-xs italic">Hover a node to see details</p>
+            )}
+          </div>
+
+          {/* Diagram */}
+          <div style={{ overflowX: 'auto', width: '100%', maxWidth: '64rem' }}>
+            <svg
+              viewBox={`0 0 ${VW} ${VH}`}
+              style={{ width: '100%', minWidth: '580px', fontFamily: "'Inter', system-ui, sans-serif" }}
+            >
+              <defs>
+                {MARKERS.map(m => (
+                  <marker key={m.id} id={m.id} markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill={m.color} />
+                  </marker>
+                ))}
+              </defs>
+
+              {/* Canvas background */}
+              <rect x="0" y="0" width={VW} height={VH} fill="#020617" />
+
+              {/* Lane backgrounds */}
+              <rect x="6" y="32" width="443" height="432" rx="12" fill="#0f172a" stroke="#1e3a5f" strokeWidth="1.5"
+                style={{ opacity: 0, animation: 'fadeIn 0.5s ease forwards' }} />
+              <rect x="455" y="32" width="439" height="432" rx="12" fill="#0f172a" stroke="#14532d" strokeWidth="1.5"
+                style={{ opacity: 0, animation: 'fadeIn 0.5s ease forwards' }} />
+
+              {/* Lane labels */}
+              <text x="228" y="23" textAnchor="middle" fill="#38bdf8" fontSize="10" fontWeight="800" letterSpacing="2.5">DATA PIPELINE</text>
+              <text x="675" y="23" textAnchor="middle" fill="#4ade80" fontSize="10" fontWeight="800" letterSpacing="2.5">APPLICATION LAYER</text>
+
+              {/* Tableau Cloud grouping */}
+              <rect x="16" y="170" width="420" height="286" rx="10" fill="none" stroke="#3b82f630" strokeWidth="1" strokeDasharray="4 3" />
+              <text x="228" y="163" textAnchor="middle" fill="#3b82f660" fontSize="7.5" letterSpacing="1.5" fontWeight="600">
+                TABLEAU CLOUD · 10az.online.tableau.com
+              </text>
+
+              {/* Arrows */}
+              {ARROWS.map(a => {
+                const lblW = a.label ? a.label.length * 5.2 + 12 : 0;
+                return (
+                  <g key={a.id}>
+                    <path
+                      d={a.d}
+                      stroke={a.color}
+                      strokeWidth="1.8"
+                      fill="none"
+                      markerEnd={a.noArrow ? undefined : `url(#${a.marker})`}
+                      strokeDasharray={a.dashed ? '6 3' : '2000'}
+                      style={a.dashed ? {
+                        opacity: 0,
+                        animation: `fadeLine 0.65s ease-in-out ${a.delay}s forwards`,
+                      } : {
+                        strokeDashoffset: 2000,
+                        opacity: 0,
+                        animation: `drawLine 0.65s ease-in-out ${a.delay}s forwards`,
+                      }}
+                    />
+                    {a.label && (
+                      <g style={{ opacity: 0, animation: `fadeIn 0.3s ease ${a.delay + 0.5}s forwards` }}>
+                        <rect x={a.lx - lblW / 2} y={a.ly - 8} width={lblW} height={13} rx="3" fill="#020617" opacity={0.9} />
+                        <text x={a.lx} y={a.ly} textAnchor="middle" fontSize="8" fill={a.color} dominantBaseline="middle">{a.label}</text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Nodes */}
+              {NODE_ORDER.map((id, i) => {
+                const n = N[id];
+                const isHov = hovered === id;
+                return (
+                  <g key={id}
+                    style={{ opacity: 0, animation: `fadeInUp 0.35s ease ${0.05 + i * 0.08}s forwards`, cursor: 'default' }}
+                    onMouseEnter={() => setHovered(id)}
+                    onMouseLeave={() => setHovered(null)}
+                  >
+                    {isHov && (
+                      <rect x={n.cx - n.w/2 - 5} y={n.cy - n.h/2 - 5} width={n.w + 10} height={n.h + 10}
+                        rx={12} fill={n.stroke} opacity={0.18} />
+                    )}
+                    <rect x={n.cx - n.w/2} y={n.cy - n.h/2} width={n.w} height={n.h} rx={8}
+                      fill={n.fill} stroke={n.stroke} strokeWidth={isHov ? 2.2 : 1.5} />
+                    <text x={n.cx - n.w/2 + 22} y={n.cy + 1} fontSize="16" textAnchor="middle" dominantBaseline="middle">{n.emoji}</text>
+                    <text x={n.cx - n.w/2 + 40} y={n.cy - 7} fontSize="11" fontWeight="700" fill="white" dominantBaseline="middle">{n.label}</text>
+                    <text x={n.cx - n.w/2 + 40} y={n.cy + 9} fontSize="9" fill="#94a3b8" dominantBaseline="middle">{n.sub}</text>
+                  </g>
+                );
+              })}
+
+              {/* Legend */}
+              <g transform="translate(272, 460)">
+                <line x1="0" y1="5" x2="20" y2="5" stroke="#475569" strokeWidth="1.5" />
+                <text x="25" y="9" fontSize="8.5" fill="#475569">Data flow</text>
+                <line x1="82" y1="5" x2="102" y2="5" stroke="#475569" strokeWidth="1.5" strokeDasharray="5 3" />
+                <text x="107" y="9" fontSize="8.5" fill="#475569">API / dependency</text>
+                <rect x="215" y="1" width="8" height="8" rx="1.5" fill="none" stroke="#475569" strokeWidth="1" strokeDasharray="3 2" />
+                <text x="227" y="9" fontSize="8.5" fill="#475569">Tableau Cloud boundary</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<ArchDiagram />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Apex Rentals Operations Portal</title>
+
+  <script type="module"
+    src="https://10az.online.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js">
+  </script>
+
+  <!-- Vega-Lite for rendering visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background-color: #f0f0f0; }
+
+    /* ── Top nav ── */
+    #topNav {
+      background-color: #5B9BD5;
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #topNav span {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #topNav .nav-spacer { flex: 1; }
+    #topNav .arch-link {
+      font-size: 0.75rem;
+      font-weight: bold;
+      color: #000;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(0,0,0,0.10);
+      border: 1px solid rgba(0,0,0,0.18);
+      padding: 4px 12px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    #topNav .arch-link:hover { background: rgba(0,0,0,0.20); }
+
+    /* ── Page header ── */
+    #pageHeader {
+      background: #fff;
+      border-left: 8px solid #5B9BD5;
+      padding: 20px 32px 12px 32px;
+      border-bottom: 1px solid #ddd;
+    }
+    #pageHeader h1 {
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: #000;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    #pageHeader .subtitle {
+      font-size: 0.95rem;
+      color: #444;
+      margin-top: 4px;
+      font-style: italic;
+    }
+    #pageHeader .subtitle span {
+      background: #5B9BD5;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-style: normal;
+      font-weight: bold;
+      color: #000;
+    }
+
+    /* ── Tab bar ── */
+    #tabBar {
+      background: #fff;
+      border-bottom: 2px solid #ddd;
+      padding: 0 32px;
+      display: flex;
+    }
+    .tab {
+      padding: 12px 24px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #666;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: #000; }
+    .tab.active { color: #000; border-bottom: 3px solid #5B9BD5; }
+
+    /* ── Full-width viz at top — reduced height ── */
+    #vizSection {
+      background: #fff;
+      border-bottom: 2px solid #ddd;
+      width: 100%;
+      height: 36vh;          /* ← reduced from 48vh */
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #vizSection tableau-viz {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* ── Bottom row: [AI Summary | Pulse Cards] ── */
+    #bottomRow {
+      display: flex;
+      flex-direction: row;
+      background: #f0f0f0;
+      min-height: 420px;     /* ← bumped slightly to use the freed space */
+      border-bottom: 2px solid #ddd;
+      gap: 0;
+    }
+
+    /* ── AI Panel (LEFT) ── */
+    #aiPanel {
+      flex: 1;
+      min-width: 0;
+      background: #fff;
+      padding: 20px 28px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-right: 2px solid #e0e0e0;
+    }
+    #aiPanelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #aiPanelHeader h2 {
+      font-size: 1rem;
+      font-weight: 900;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #aiPanelHeader .badge {
+      background: #5B9BD5;
+      color: #000;
+      font-size: 0.65rem;
+      font-weight: bold;
+      padding: 3px 9px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Pulse area (RIGHT — 46%) ── */
+    #pulseArea {
+      width: 46%;
+      flex-shrink: 0;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #pulseAreaHeader {
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 3px solid #5B9BD5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+    #pulseAreaHeader h3 {
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #000;
+      white-space: nowrap;
+    }
+    #pulseStatus {
+      font-size: 0.7rem;
+      color: #666;
+      font-style: italic;
+    }
+
+    /* Viz cards - stacked vertically */
+    #pulseEmbeds {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px;
+      overflow-y: auto;
+    }
+
+    .pulse-embed-card {
+      min-width: 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      min-height: 200px;
+    }
+
+    .viz-container {
+      padding: 10px;
+      min-height: 150px;
+    }
+    .pulse-embed-label {
+      background: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+      padding: 6px 10px;
+      font-size: 0.68rem;
+      font-weight: bold;
+      color: #333;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .pulse-embed-id {
+      font-weight: normal;
+      font-family: monospace;
+      font-size: 0.6rem;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 70px;
+    }
+    .pulse-embed-body {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    .pulse-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      font-size: 0.78rem;
+      font-style: italic;
+      gap: 6px;
+    }
+    .pulse-error-msg {
+      padding: 10px;
+      color: #c0392b;
+      font-size: 0.73rem;
+      background: #fce8e8;
+      border-top: 1px solid #f5c6c6;
+    }
+    tableau-pulse {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pulse-empty {
+      padding: 16px;
+      text-align: center;
+      color: #888;
+      font-size: 0.78rem;
+      border: 2px dashed #e0e0e0;
+      border-radius: 4px;
+      line-height: 1.7;
+      width: 100%;
+      align-self: center;
+    }
+    .pulse-empty code {
+      background: #f0f0f0;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.73rem;
+    }
+
+    /* ── Prompt dialog ── */
+    #promptOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1000;
+    }
+    #promptModal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1001;
+      background: #fff;
+      border: 2px solid #5B9BD5;
+      border-radius: 8px;
+      padding: 24px 28px 20px;
+      width: 520px;
+      max-width: 94vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+    }
+    #promptModal h3 {
+      font-size: 0.85rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #000;
+      margin-bottom: 12px;
+      border-left: 4px solid #5B9BD5;
+      padding-left: 10px;
+    }
+    #promptInput {
+      width: 100%;
+      min-height: 100px;
+      font-size: 0.85rem;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #222;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px 12px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    #promptInput:focus {
+      outline: none;
+      border-color: #5B9BD5;
+      box-shadow: 0 0 0 2px rgba(91,155,213,0.25);
+    }
+    .prompt-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .prompt-cancel-btn {
+      background: none;
+      border: 1px solid #ccc;
+      padding: 6px 16px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      border-radius: 3px;
+      color: #666;
+    }
+    .prompt-cancel-btn:hover { background: #f5f5f5; }
+    .prompt-send-btn {
+      background: #5B9BD5;
+      border: 1px solid #3a7ab5;
+      padding: 6px 18px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 3px;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .prompt-send-btn:hover { background: #4a8ac4; }
+
+    /* ── Toolbar ── */
+    .toolbar-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .toolbar-btn {
+      background: none;
+      border: 1px solid #ccc;
+      padding: 4px 10px;
+      font-size: 0.68rem;
+      cursor: pointer;
+      border-radius: 3px;
+      color: #666;
+    }
+    .toolbar-btn:hover { background: #f5f5f5; }
+
+    /* ── AI Answer card ── */
+    #aiAnswerWrap {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    #aiAnswerLabel {
+      background: #f5f5f5;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 8px 16px;
+      font-size: 0.7rem;
+      font-weight: bold;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    #aiAnswerLabel::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #5B9BD5;
+      border-radius: 50%;
+    }
+    #aiAnswer {
+      padding: 18px 20px;
+      min-height: 60px;
+      font-size: 0.88rem;
+      line-height: 1.8;
+      color: #222;
+      background: #fff;
+      overflow-y: auto;
+      flex: 1;
+    }
+    #aiAnswer.thinking {
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Rich typography inside AI answer ── */
+    #aiAnswer h2 {
+      font-size: 1rem;
+      font-weight: 900;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 18px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #5B9BD5;
+    }
+    #aiAnswer h3 {
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-left: 4px solid #5B9BD5;
+      padding-left: 10px;
+      margin: 16px 0 6px;
+    }
+    #aiAnswer h4 {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #333;
+      margin: 10px 0 4px;
+    }
+    #aiAnswer p {
+      margin-bottom: 10px;
+      color: #333;
+    }
+    #aiAnswer ul {
+      padding-left: 0;
+      margin: 4px 0 12px;
+      list-style: none;
+    }
+    #aiAnswer ul li {
+      padding: 4px 0 4px 20px;
+      position: relative;
+      color: #333;
+      line-height: 1.6;
+    }
+    #aiAnswer ul li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #5B9BD5;
+      font-size: 0.85rem;
+      top: 5px;
+    }
+    #aiAnswer ol {
+      padding-left: 0;
+      margin: 4px 0 12px;
+      list-style: none;
+    }
+    #aiAnswer ol li {
+      padding: 4px 0 4px 20px;
+      position: relative;
+      margin-bottom: 6px;
+      color: #333;
+      line-height: 1.6;
+    }
+    #aiAnswer ol li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #5B9BD5;
+      font-size: 0.85rem;
+      top: 5px;
+    }
+    #aiAnswer strong, #aiAnswer b {
+      font-weight: 700;
+      color: #000;
+    }
+    #aiAnswer em, #aiAnswer i {
+      font-style: italic;
+      color: #555;
+    }
+    #aiAnswer code {
+      background: #f4f4f4;
+      border: 1px solid #e0e0e0;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      color: #c0392b;
+    }
+    #aiAnswer hr {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 16px 0;
+    }
+    #aiAnswer table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-bottom: 12px;
+    }
+    #aiAnswer th {
+      background: #f5f5f5;
+      font-weight: 700;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 7px 10px;
+      text-align: left;
+      border: 1px solid #e0e0e0;
+      color: #555;
+    }
+    #aiAnswer td {
+      padding: 6px 10px;
+      border: 1px solid #e8e8e8;
+      color: #333;
+    }
+    #aiAnswer tr:nth-child(even) td { background: #fafafa; }
+    #aiAnswer > *:first-child { margin-top: 0; }
+    #aiAnswer > *:last-child  { margin-bottom: 0; }
+
+    /* ── Metric inline highlight pill ── */
+    .metric-pill {
+      display: inline-block;
+      background: #e3f0ff;
+      border: 1px solid #5B9BD5;
+      border-radius: 4px;
+      padding: 1px 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #2a5a9b;
+      margin: 0 2px;
+    }
+
+    /* ── Reference numbers ── */
+    .ref-num {
+      display: inline-block;
+      background: #5B9BD5;
+      color: #000;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin: 0 2px;
+      line-height: 1;
+      vertical-align: baseline;
+    }
+    .ref-num a {
+      color: #000;
+      text-decoration: none;
+      cursor: pointer;
+      position: relative;
+    }
+    .ref-num a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Metric card popup on hover ── */
+    .metric-popup {
+      position: fixed;
+      z-index: 999999;
+      background: white;
+      border: 2px solid #5B9BD5;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      width: 450px;
+      height: 480px;
+      pointer-events: none;
+      display: none;
+      padding: 0;
+      opacity: 1;
+      overflow: visible;
+    }
+    .metric-popup.show {
+      display: block !important;
+      visibility: visible !important;
+    }
+    .metric-popup > * {
+      width: 450px !important;
+      height: 480px !important;
+      display: block !important;
+    }
+
+    /* ── Enhanced list styling ── */
+    #aiAnswer ul li::before {
+      color: #5B9BD5;
+      font-weight: 900;
+    }
+
+    /* ── Section headers with better visual hierarchy ── */
+    #aiAnswer h4 {
+      background: linear-gradient(90deg, rgba(91,155,213,0.15) 0%, transparent 100%);
+      padding: 6px 10px;
+      margin: 12px -10px 8px -10px;
+      border-left: 3px solid #5B9BD5;
+      font-size: 0.85rem;
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #ddd;
+      border-top-color: #333;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══════════════════════════════════════════════════════════════════
+       PRINT STYLES - Optimized for landscape single page
+    ══════════════════════════════════════════════════════════════════ */
+    @media print {
+      @page {
+        size: landscape;
+        margin: 0.5in;
+      }
+
+      /* Hide interactive elements */
+      #topNav,
+      #tabBar,
+      #vizSection,
+      #footer,
+      .toolbar-row,
+      #pulseAreaHeader,
+      #promptOverlay,
+      #promptModal,
+      .spinner {
+        display: none !important;
+      }
+
+      /* Reset body */
+      body {
+        background: white;
+        font-size: 9pt;
+        line-height: 1.3;
+      }
+
+      /* Compact page header */
+      #pageHeader {
+        padding: 8px 0;
+        border-left: none;
+        border-bottom: 2px solid #5B9BD5;
+        page-break-after: avoid;
+      }
+
+      #pageHeader h1 {
+        font-size: 18pt;
+        margin-bottom: 2px;
+      }
+
+      #pageHeader .subtitle {
+        font-size: 9pt;
+        margin-top: 0;
+      }
+
+      /* Main content area - landscape layout */
+      #bottomRow {
+        display: flex;
+        flex-direction: row;
+        min-height: auto;
+        height: auto;
+        gap: 12px;
+        border: none;
+        page-break-inside: avoid;
+      }
+
+      /* AI Panel - left side, 45% width */
+      #aiPanel {
+        flex: 0 0 45%;
+        padding: 0;
+        border: none;
+        overflow: visible;
+      }
+
+      #aiPanelHeader {
+        margin-bottom: 6px;
+      }
+
+      #aiPanelHeader h2 {
+        font-size: 11pt;
+        margin-bottom: 4px;
+      }
+
+      #aiPanelHeader .badge {
+        font-size: 7pt;
+        padding: 2px 6px;
+      }
+
+      /* AI Answer content */
+      #aiAnswerWrap {
+        border: 1px solid #ddd;
+        box-shadow: none;
+        page-break-inside: avoid;
+      }
+
+      #aiAnswerLabel {
+        padding: 4px 8px;
+        font-size: 8pt;
+        background: #f5f5f5;
+      }
+
+      #aiAnswer {
+        padding: 10px 12px;
+        font-size: 8.5pt;
+        line-height: 1.4;
+        overflow: visible;
+        max-height: none;
+      }
+
+      #aiAnswer h2 {
+        font-size: 10pt;
+        margin: 8px 0 4px;
+        page-break-after: avoid;
+      }
+
+      #aiAnswer h3 {
+        font-size: 9pt;
+        margin: 6px 0 3px;
+        page-break-after: avoid;
+      }
+
+      #aiAnswer h4 {
+        font-size: 8.5pt;
+        margin: 6px -8px 3px -8px;
+        padding: 3px 8px;
+        page-break-after: avoid;
+      }
+
+      #aiAnswer ul, #aiAnswer ol {
+        margin: 3px 0 6px;
+      }
+
+      #aiAnswer li {
+        margin-bottom: 2px;
+        font-size: 8pt;
+        line-height: 1.3;
+        page-break-inside: avoid;
+      }
+
+      #aiAnswer strong {
+        font-size: 8pt;
+      }
+
+      .ref-num {
+        font-size: 6pt;
+        padding: 0 3px;
+      }
+
+      /* Viz Area - right side, 55% width */
+      #pulseArea {
+        flex: 0 0 55%;
+        border: none;
+        overflow: visible;
+      }
+
+      #pulseEmbeds {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 0;
+        overflow: visible;
+      }
+
+      .pulse-embed-card {
+        border: 1px solid #ddd;
+        page-break-inside: avoid;
+        min-height: auto;
+        max-height: 280px;
+      }
+
+      .pulse-embed-label {
+        padding: 4px 8px;
+        font-size: 7.5pt;
+        background: #f5f5f5;
+      }
+
+      .viz-container {
+        padding: 6px;
+        min-height: auto;
+        height: 240px;
+      }
+
+      /* Ensure SVG charts scale properly */
+      .viz-container svg {
+        max-width: 100%;
+        max-height: 100%;
+      }
+
+      /* Hide Vega action buttons */
+      .vega-actions {
+        display: none !important;
+      }
+
+      /* Prevent page breaks in key areas */
+      #aiAnswerWrap,
+      .pulse-embed-card {
+        page-break-inside: avoid;
+      }
+    }
+
+    /* ── Safety tab ── */
+    #safetySection {
+      display: none;
+      flex-direction: row;
+      background: #f0f0f0;
+      min-height: calc(100vh - 180px);
+      border-bottom: 2px solid #ddd;
+      gap: 0;
+    }
+    #safetySection.active { display: flex; }
+
+    #safetyMetricPanel {
+      flex: 1;
+      min-width: 0;
+      background: #fff;
+      padding: 20px 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-right: 2px solid #e0e0e0;
+      overflow-y: auto;
+    }
+    #safetyMetricPanel h2 {
+      font-size: 1rem;
+      font-weight: 900;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #safetyMetricWrap {
+      flex: 1;
+      min-height: 480px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    #safetyMetricWrap tableau-pulse {
+      width: 100%;
+      height: 100%;
+      display: block;
+      min-height: 480px;
+    }
+
+    #safetyAIPanel {
+      width: 46%;
+      flex-shrink: 0;
+      background: #fff;
+      padding: 20px 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    #safetyAIPanel h2 {
+      font-size: 1rem;
+      font-weight: 900;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #safetyAIPanel .badge {
+      background: #5B9BD5;
+      color: #000;
+      font-size: 0.65rem;
+      font-weight: bold;
+      padding: 3px 9px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #safetyAIPanelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #safetyAnswerWrap {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    #safetyAnswerLabel {
+      background: #f5f5f5;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 8px 16px;
+      font-size: 0.7rem;
+      font-weight: bold;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    #safetyAnswerLabel::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #5B9BD5;
+      border-radius: 50%;
+    }
+    #safetyAnswer {
+      padding: 18px 20px;
+      min-height: 60px;
+      font-size: 0.88rem;
+      line-height: 1.8;
+      color: #222;
+      background: #fff;
+      overflow-y: auto;
+      flex: 1;
+    }
+    #safetyAnswer.thinking {
+      color: #999;
+      font-style: italic;
+    }
+    #safetyAnswer h3 {
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-left: 4px solid #5B9BD5;
+      padding-left: 10px;
+      margin: 16px 0 6px;
+    }
+    #safetyAnswer h4 {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #333;
+      background: linear-gradient(90deg, rgba(91,155,213,0.15) 0%, transparent 100%);
+      padding: 6px 10px;
+      margin: 12px -10px 8px -10px;
+      border-left: 3px solid #5B9BD5;
+    }
+    #safetyAnswer p { margin-bottom: 10px; color: #333; }
+    #safetyAnswer ul { padding-left: 0; margin: 4px 0 12px; list-style: none; }
+    #safetyAnswer ul li {
+      padding: 4px 0 4px 20px;
+      position: relative;
+      color: #333;
+      line-height: 1.6;
+    }
+    #safetyAnswer ul li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #5B9BD5;
+      font-size: 0.85rem;
+      top: 5px;
+    }
+    #safetyAnswer strong { font-weight: 700; color: #000; }
+    #safetyAnswer em { font-style: italic; color: #555; }
+    #safetyAnswer hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+    #safetyAnswer > *:first-child { margin-top: 0; }
+    #safetyAnswer > *:last-child  { margin-bottom: 0; }
+
+    /* ── Safety RCA ── */
+    #safetyAnswerWrap { flex: 0 0 auto; }
+    #safetyRCAWrap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    #safetyRCAResult {
+      font-size: 0.85rem;
+      color: #333;
+      padding: 10px 0 0;
+    }
+    #safetyRCAResult h3 {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-left: 4px solid #5B9BD5;
+      padding-left: 10px;
+      margin: 14px 0 6px;
+    }
+    #safetyRCAResult ul { padding-left: 0; margin: 4px 0 10px; list-style: none; }
+    #safetyRCAResult ul li {
+      padding: 3px 0 3px 20px;
+      position: relative;
+      color: #333;
+      line-height: 1.6;
+    }
+    #safetyRCAResult ul li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #5B9BD5;
+      font-size: 0.85rem;
+      top: 4px;
+    }
+    #safetyRCAResult p { margin-bottom: 8px; }
+    #safetyRCAResult strong { font-weight: 700; color: #000; }
+
+    /* ── Safety raw response ── */
+    #safetyRawWrap {
+      background: #1a1a1a;
+      color: #ccc;
+      font-family: 'Courier New', monospace;
+      font-size: 0.68rem;
+      border-radius: 4px;
+      max-height: 420px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: none;
+      flex-shrink: 0;
+    }
+    #safetyRawWrap.visible { display: block; }
+    #safetyRawWrap pre { margin: 0; padding: 10px 14px; }
+
+    /* ── Footer ── */
+    #footer {
+      background: #222;
+      color: #888;
+      font-size: 0.75rem;
+      padding: 12px 32px;
+      text-align: center;
+    }
+    #footer a {
+      color: #5B9BD5;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    #footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <div id="topNav">
+    <span>Pacifica Rentals Operations Portal</span>
+    <div class="nav-spacer"></div>
+    <a href="/architecture.html" class="arch-link">🗺 Architecture</a>
+    <button class="arch-link" onclick="window.print()" style="cursor:pointer;">🖨️ Print Report</button>
+  </div>
+
+  <div id="pageHeader">
+    <h1>Operations</h1>
+    <div class="subtitle">
+      Operations Daily Performance Summary &nbsp;—&nbsp;
+      <span id="todayDate"></span>
+    </div>
+  </div>
+
+  <div id="tabBar">
+    <div class="tab active">Performance</div>
+    <div class="tab">Safety</div>
+  </div>
+
+  <!-- ① Full-width Tableau viz — reduced height -->
+  <div id="vizSection"></div>
+
+  <!-- ② Bottom row: [AI Summary LEFT] [Pulse Cards RIGHT] -->
+  <div id="bottomRow">
+
+    <!-- AI Panel — left -->
+    <div id="aiPanel">
+      <div id="aiPanelHeader">
+        <h2>AI Operations Summary</h2>
+        <div class="badge">⚡ COO Brief</div>
+      </div>
+
+      <div class="toolbar-row">
+        <button class="toolbar-btn" onclick="openPromptDialog()">✏️ New Prompt</button>
+      </div>
+
+      <div id="aiAnswerWrap">
+        <div id="aiAnswerLabel">AI Summary</div>
+        <div id="aiAnswer" class="thinking">
+          <span class="spinner"></span> Loading COO summary...
+        </div>
+      </div>
+    </div>
+
+    <!-- Pulse Area — right -->
+    <div id="pulseArea">
+      <div id="pulseAreaHeader">
+        <h3>📊 Key Insights</h3>
+        <span id="pulseStatus"><span class="spinner"></span> Loading...</span>
+      </div>
+      <div id="pulseEmbeds">
+        <!-- Visualizations injected here -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Safety Tab Content -->
+  <div id="safetySection">
+
+    <!-- Pulse Metric — left -->
+    <div id="safetyMetricPanel">
+      <h2>Safety Metric</h2>
+      <div id="safetyMetricWrap">
+        <!-- tableau-pulse injected by JS after token fetch -->
+      </div>
+    </div>
+
+    <!-- AI Summary — right -->
+    <div id="safetyAIPanel">
+      <div id="safetyAIPanelHeader">
+        <h2>AI Safety Summary</h2>
+        <div class="badge">⚡ Pulse Insights</div>
+      </div>
+      <div class="toolbar-row">
+        <button class="toolbar-btn" onclick="refreshSafetySummary()">🔄 Refresh</button>
+        <button class="toolbar-btn" id="safetyRawToggle" onclick="toggleSafetyRaw()">📄 Raw API Response</button>
+      </div>
+      <div id="safetyRawWrap"><pre id="safetyRawContent"></pre></div>
+      <div id="safetyAnswerWrap">
+        <div id="safetyAnswerLabel">AI Summary</div>
+        <div id="safetyAnswer" class="thinking">
+          <span class="spinner"></span> Loading safety summary...
+        </div>
+      </div>
+
+      <div id="safetyRCAWrap" style="display:none;">
+        <button class="prompt-send-btn" style="width:100%;padding:10px;" onclick="runSafetyRCA()">
+          🔍 Run Root Cause Analysis on Top Market Area
+        </button>
+        <div id="safetyRCAResult"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="footer">
+    Apex Rentals Operations Portal &nbsp;|&nbsp; Powered by Tableau &amp; Claude AI &nbsp;|&nbsp; Data refreshes daily
+    &nbsp;|&nbsp; <a href="/architecture.html">View Architecture</a>
+  </div>
+
+  <!-- Prompt dialog -->
+  <div id="promptOverlay" style="display:none;" onclick="closePromptDialog()"></div>
+  <div id="promptModal" style="display:none;">
+    <h3>New Prompt</h3>
+    <textarea id="promptInput" placeholder="Enter your prompt for the insights brief…"></textarea>
+    <div class="prompt-actions">
+      <button class="prompt-cancel-btn" onclick="closePromptDialog()">Cancel</button>
+      <button class="prompt-send-btn" onclick="submitPrompt()">Send</button>
+    </div>
+  </div>
+
+  <script type="module">
+    /* ─── Imports ─── */
+    import { fetchAndCallBrief } from './pulse-brief-utils.js';
+
+    /* ─── Date + tabs ─── */
+    document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric'
+    });
+    const performanceSection = document.getElementById('bottomRow');
+    const safetySection      = document.getElementById('safetySection');
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const name = tab.textContent.trim();
+        if (name === 'Safety') {
+          performanceSection.style.display = 'none';
+          safetySection.classList.add('active');
+          initSafetyMetric();
+          loadSafetySummary();
+        } else {
+          safetySection.classList.remove('active');
+          performanceSection.style.display = '';
+        }
+      });
+    });
+
+    let safetyMetricLoaded = false;
+    async function initSafetyMetric() {
+      if (safetyMetricLoaded) return;
+      safetyMetricLoaded = true;
+
+      const wrap = document.getElementById('safetyMetricWrap');
+      wrap.innerHTML = '<div style="padding:20px;color:#999;font-style:italic;font-size:0.85rem;"><span class="spinner"></span> Loading metric...</div>';
+
+      let token;
+      try {
+        const res = await fetch('/token');
+        if (!res.ok) throw new Error(`/token returned ${res.status}`);
+        const data = await res.json();
+        token = data.token || data.credentials?.token;
+        if (!token) throw new Error('No token in response');
+      } catch (e) {
+        wrap.innerHTML = `<p style="padding:16px;color:#c0392b;font-size:0.82rem;">⚠️ Failed to load token: ${escHtml(e.message)}</p>`;
+        safetyMetricLoaded = false;
+        return;
+      }
+
+      wrap.innerHTML = '';
+      const metric = document.createElement('tableau-pulse');
+      metric.setAttribute('src', 'https://10az.online.tableau.com/pulse/site/businessservices/metrics/b78060d9-1257-4e68-8895-69e3e65e47d3');
+      metric.setAttribute('token', token);
+      metric.setAttribute('layout', 'card');
+      metric.style.cssText = 'width:100%;height:100%;display:block;min-height:480px;';
+      wrap.appendChild(metric);
+    }
+
+    /* ─── Config ─── */
+    const TABLEAU_SERVER = 'https://10az.online.tableau.com';
+    const TABLEAU_SITE   = 'businessservices';
+    const UUID_RE        = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    let safetySummaryLoaded = false;
+    let safetyTopMarketArea = null;
+
+    async function loadSafetySummary(force = false) {
+      if (safetySummaryLoaded && !force) return;
+      safetySummaryLoaded = true;
+
+      const box = document.getElementById('safetyAnswer');
+      box.className = 'thinking';
+      box.innerHTML = '<span class="spinner"></span> Fetching Pulse insights...';
+
+      // Reset panels when reloading
+      document.getElementById('safetyRawContent').textContent = '';
+      document.getElementById('safetyRawWrap').classList.remove('visible');
+      document.getElementById('safetyRawToggle').textContent = '📄 Raw API Response';
+      document.getElementById('safetyRCAWrap').style.display = 'none';
+      document.getElementById('safetyRCAResult').innerHTML = '';
+
+      try {
+        const res = await fetch('/safety-pulse-summary');
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        box.className = '';
+        box.innerHTML = data.summary;
+        safetyTopMarketArea = data.topMarketArea || null;
+        document.getElementById('safetyRCAWrap').style.display = 'flex';
+        if (data.raw) {
+          document.getElementById('safetyRawContent').textContent = JSON.stringify(data.raw, null, 2);
+        }
+      } catch (e) {
+        box.className = '';
+        box.innerHTML = `<p>⚠️ Failed to load safety summary: ${escHtml(e.message)}</p>`;
+        safetySummaryLoaded = false;
+      }
+    }
+
+    function refreshSafetySummary() {
+      safetySummaryLoaded = false;
+      loadSafetySummary(true);
+    }
+
+    async function runSafetyRCA() {
+      const result = document.getElementById('safetyRCAResult');
+      const btn    = document.querySelector('#safetyRCAWrap button');
+
+      if (!safetyTopMarketArea || safetyTopMarketArea === 'unknown') {
+        result.innerHTML = '<p style="color:#c0392b;">⚠️ No market area identified from Pulse data — cannot run RCA.</p>';
+        return;
+      }
+
+      btn.disabled = true;
+      result.innerHTML = `<span class="spinner"></span> Analyzing incidents for <strong>${escHtml(safetyTopMarketArea)}</strong>…`;
+
+      try {
+        const res = await fetch(`/safety-rca?marketArea=${encodeURIComponent(safetyTopMarketArea)}`);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        result.innerHTML = `
+          <p style="font-size:0.72rem;color:#888;margin-bottom:8px;">
+            Based on <strong>${data.recordsAnalyzed}</strong> of <strong>${data.totalIncidents}</strong> incidents in <strong>${escHtml(data.marketArea)}</strong> — <strong>${escHtml(data.monthLabel)}</strong>
+          </p>
+          ${data.analysis}`;
+      } catch (e) {
+        result.innerHTML = `<p style="color:#c0392b;">⚠️ RCA failed: ${escHtml(e.message)}</p>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function toggleSafetyRaw() {
+      const wrap = document.getElementById('safetyRawWrap');
+      const btn  = document.getElementById('safetyRawToggle');
+      const show = !wrap.classList.contains('visible');
+      wrap.classList.toggle('visible', show);
+      btn.textContent = show ? '📄 Hide Raw' : '📄 Raw API Response';
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────
+       MARKDOWN → HTML RENDERER
+    ───────────────────────────────────────────────────────────────────── */
+    function renderMarkdown(text) {
+      if (!text) return '';
+      if (/<(p|h[1-6]|ul|ol|li|div|table|br)\b/i.test(text)) {
+        console.log('AI answer detected as HTML — rendering directly');
+        return text;
+      }
+      console.log('AI answer detected as Markdown — converting to HTML');
+      const lines  = text.split('\n');
+      let   html   = '';
+      let   inUl   = false;
+      let   inOl   = false;
+      let   inP    = false;
+      let   pBuf   = '';
+
+      function flushP() {
+        if (pBuf.trim()) {
+          html += '<p>' + inlineFormat(pBuf.trim()) + '</p>';
+          pBuf = '';
+        }
+        inP = false;
+      }
+      function closeUl() { if (inUl) { html += '</ul>'; inUl = false; } }
+      function closeOl() { if (inOl) { html += '</ol>'; inOl = false; } }
+      function closeLists() { closeUl(); closeOl(); }
+
+      for (let i = 0; i < lines.length; i++) {
+        const raw  = lines[i];
+        const line = raw.trimEnd();
+        const h4 = line.match(/^#### (.+)/);
+        const h3 = line.match(/^### (.+)/);
+        const h2 = line.match(/^## (.+)/);
+        const h1 = line.match(/^# (.+)/);
+        if (h4 || h3 || h2 || h1) {
+          flushP(); closeLists();
+          if (h4) html += `<h4>${inlineFormat(h4[1])}</h4>`;
+          else if (h3) html += `<h3>${inlineFormat(h3[1])}</h3>`;
+          else if (h2) html += `<h2>${inlineFormat(h2[1])}</h2>`;
+          else         html += `<h2>${inlineFormat(h1[1])}</h2>`;
+          continue;
+        }
+        if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line)) {
+          flushP(); closeLists();
+          html += '<hr>';
+          continue;
+        }
+        const ulm = line.match(/^[\-\*\+] (.+)/);
+        if (ulm) {
+          flushP();
+          if (!inUl) { closeOl(); html += '<ul>'; inUl = true; }
+          html += `<li>${inlineFormat(ulm[1])}</li>`;
+          continue;
+        }
+        const olm = line.match(/^\d+[\.\)] (.+)/);
+        if (olm) {
+          flushP();
+          if (!inOl) { closeUl(); html += '<ol>'; inOl = true; }
+          html += `<li>${inlineFormat(olm[1])}</li>`;
+          continue;
+        }
+        if (line.trim() === '') {
+          flushP();
+          closeLists();
+          continue;
+        }
+        closeLists();
+        if (pBuf) pBuf += ' ' + line;
+        else       pBuf  = line;
+        inP = true;
+      }
+      flushP();
+      closeLists();
+      return html;
+    }
+
+    function inlineFormat(text) {
+      return text
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.+?)__/g,      '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/_([^_]+?)_/g, '<em>$1</em>')
+        .replace(/`([^`]+?)`/g, '<code>$1</code>');
+    }
+
+    /* ─── Token ─── */
+    async function getToken() {
+      const res = await fetch('/token');
+      if (!res.ok) throw new Error(`/token returned ${res.status}`);
+      const data = await res.json();
+      const token = data.token || data.credentials?.token;
+      if (!token) throw new Error('No token field in /token response. Keys: ' + Object.keys(data).join(', '));
+      return token;
+    }
+
+    /* ─── Tableau Viz (full-width top) — toolbar hidden ─── */
+    async function initViz() {
+      if (!customElements.get('tableau-viz')) {
+        console.error('tableau-viz NOT registered'); return;
+      }
+      console.log('tableau-viz registered ✔');
+      let token;
+      try { token = await getToken(); }
+      catch (e) { console.error('Viz token failed: ' + e.message); return; }
+
+      const viz = document.createElement('tableau-viz');
+      viz.setAttribute('src', `${TABLEAU_SERVER}/t/${TABLEAU_SITE}/views/OperationalDemo/OperationalMetrics`);
+      viz.setAttribute('token',     token);
+      viz.setAttribute('toolbar',   'hidden');
+      viz.setAttribute('hide-tabs', '');
+      viz.setAttribute('origin',    'https://localhost:5500');
+      viz.style.cssText = 'width:100%;height:100%;display:block;';
+      viz.addEventListener('firstinteractive', () => console.log('Viz interactive ✔'));
+      viz.addEventListener('error', e => console.error('Viz error: ' + JSON.stringify(e.detail)));
+      document.getElementById('vizSection').appendChild(viz);
+    }
+
+    const DEFAULT_PROMPT = 'You are an analyst for the COO of Apex Rentals. Highlight the 3 key items the COO needs to be aware of and underlying drivers of those. Particularly highlight any concerning correlations';
+
+    /* ─── Prompt dialog ─── */
+    function openPromptDialog() {
+      const input = document.getElementById('promptInput');
+      if (!input.value) input.value = DEFAULT_PROMPT;
+      document.getElementById('promptOverlay').style.display = 'block';
+      document.getElementById('promptModal').style.display = 'block';
+      input.focus();
+      input.select();
+    }
+
+    function closePromptDialog() {
+      document.getElementById('promptOverlay').style.display = 'none';
+      document.getElementById('promptModal').style.display = 'none';
+    }
+
+    function submitPrompt() {
+      const prompt = document.getElementById('promptInput').value.trim();
+      if (!prompt) return;
+      closePromptDialog();
+      runSummary(prompt);
+    }
+
+    /* ─── runSummary — using Pulse Brief ─── */
+    async function runSummary(customPrompt) {
+      const prompt   = customPrompt || DEFAULT_PROMPT;
+      const box      = document.getElementById('aiAnswer');
+      const statusEl = document.getElementById('pulseStatus');
+
+      box.className = 'thinking';
+      box.innerHTML = '<span class="spinner"></span> Fetching watched metrics...';
+      statusEl.innerHTML = '<span class="spinner"></span> Loading...';
+
+      // Step 1: Get watched metrics from server
+      let watchedMetrics;
+      try {
+        const res = await fetch('/watched-metrics');
+        if (!res.ok) throw new Error(`/watched-metrics returned ${res.status}`);
+        const data = await res.json();
+        watchedMetrics = data.metricIds || [];
+
+        if (!watchedMetrics.length) {
+          throw new Error('No watched metrics configured in server.js');
+        }
+      } catch (e) {
+        box.className = '';
+        box.innerHTML = '<p>⚠️ Error loading watched metrics: ' + escHtml(e.message) + '</p>';
+        statusEl.innerHTML = '⚠️ Failed';
+        return;
+      }
+
+      // Step 2: Call Pulse Brief with watched metrics
+      box.innerHTML = '<span class="spinner"></span> Calling Tableau Pulse insights/brief...';
+
+      let briefResult;
+      try {
+        briefResult = await fetchAndCallBrief(watchedMetrics, {
+          content: prompt,
+          timeZone: 'America/New_York',
+          language: 'LANGUAGE_EN_US',
+          locale: 'LOCALE_EN_US',
+          endpoint: '/tableau-proxy/api/-/pulse/insights/brief'
+        });
+
+        if (!briefResult.result.ok) {
+          throw new Error(`Pulse Brief returned ${briefResult.result.status}: ${JSON.stringify(briefResult.result.body)}`);
+        }
+
+      } catch (e) {
+        box.className = '';
+        box.innerHTML = '<p>⚠️ Error calling Pulse Brief: ' + escHtml(e.message) + '</p>';
+        console.error('Pulse Brief error: ' + e.message);
+        statusEl.innerHTML = '⚠️ Failed';
+        return;
+      }
+
+      // Step 3: Render the brief response
+      const briefBody = briefResult.result.body;
+      const sourceInsights = briefBody.source_insights || [];
+
+      try {
+        let summary = '';
+
+        // The Pulse Brief response structure - extract markup field
+        if (typeof briefBody === 'string') {
+          summary = briefBody;
+        } else if (briefBody.markup) {
+          // Pulse Brief returns a "markup" field with formatted markdown
+          summary = briefBody.markup;
+        } else if (briefBody.brief?.summary) {
+          summary = briefBody.brief.summary;
+        } else if (briefBody.messages?.[0]?.content) {
+          summary = briefBody.messages[0].content;
+        } else {
+          summary = JSON.stringify(briefBody, null, 2);
+        }
+
+        // Build insight lookup for tooltips
+        const insightLookup = {};
+        sourceInsights.forEach(insight => {
+          if (insight.id && insight.question) {
+            insightLookup[insight.id] = {
+              question: insight.question,
+              type: insight.type,
+              markup: insight.markup
+            };
+          }
+        });
+
+        // Process the summary to convert citations to clickable badges with tooltips
+        // Convert [[1]](insight-id|metric-id) to clickable badges
+        summary = summary.replace(/\[\[(\d+)\]\]\(([^|]+)\|([^\)]+)\)/g, (match, num, insightId, metricId) => {
+          const tableauUrl = `${TABLEAU_SERVER}/pulse/site/${TABLEAU_SITE}/metrics/${metricId}`;
+          const insight = insightLookup[insightId];
+          const tooltip = insight ? insight.question : 'View metric in Tableau Pulse';
+          return `<sup class="ref-num"><a href="${tableauUrl}" target="_blank" title="${escHtml(tooltip)}" data-insight-id="${insightId}" data-metric-id="${metricId}" class="metric-link">[${num}]</a></sup>`;
+        });
+
+        box.className = '';
+        box.innerHTML = renderMarkdown(summary);
+        console.log('Brief summary rendered ✔');
+
+        // Add metric card hover functionality
+        setupMetricHoverCards();
+
+      } catch (e) {
+        box.className = '';
+        box.innerHTML = '<p>⚠️ Error rendering brief: ' + escHtml(e.message) + '</p>';
+        console.error('Render error: ' + e.message);
+      }
+
+      // Step 4: Extract and render Vega-Lite visualizations
+      // Helper function to extract dimension from question
+      const extractDimension = (question) => {
+        if (!question) return null;
+        const match = question.match(/Which\s+([A-Z][A-Za-z\s]+?)(?:\s+increased|\s+decreased|\s+changed)/);
+        return match ? match[1].trim() : null;
+      };
+
+      // Extract viz and labels from each insight
+      const vizData = sourceInsights
+        .filter(insight => insight.viz)
+        .map(insight => {
+          // Extract metric name from markup
+          const markup = insight.markup || '';
+          const metricMatch = markup.match(/<span data-type="metric">([^<]+)<\/span>/);
+          const metricName = metricMatch ? metricMatch[1] : 'Metric';
+
+          // Extract direction (up/down)
+          const directionMatch = markup.match(/<span data-type="insight-type-keyword">(up|down) [^<]+<\/span>/);
+          const direction = directionMatch ? directionMatch[1] : '';
+
+          // Extract dimension from question
+          const dimension = extractDimension(insight.question);
+          const dimensionLabel = dimension ? ` by ${dimension}` : '';
+
+          return {
+            viz: insight.viz,
+            label: `${metricName}${direction ? ' (' + direction + ')' : ''}${dimensionLabel}`
+          };
+        });
+
+      console.log(`Found ${vizData.length} visualization(s)`);
+
+      await renderVizualizations(vizData);
+    }
+
+    /* ─── renderVizualizations ─── */
+    async function renderVizualizations(vizData) {
+      const statusEl = document.getElementById('pulseStatus');
+      const embedsEl = document.getElementById('pulseEmbeds');
+      embedsEl.innerHTML = '';
+
+      if (!vizData || vizData.length === 0) {
+        statusEl.innerHTML = 'No visualizations';
+        embedsEl.innerHTML = `<div class="pulse-empty">No visualizations in response.</div>`;
+        return;
+      }
+
+      statusEl.innerHTML = `${vizData.length} chart${vizData.length !== 1 ? 's' : ''}`;
+
+      vizData.forEach((item, index) => {
+        console.log(`Rendering viz ${index + 1}/${vizData.length}: ${item.label}`);
+
+        const card = document.createElement('div');
+        card.className = 'pulse-embed-card';
+
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'pulse-embed-label';
+        labelDiv.innerHTML = `
+          <sup class="ref-num">[${index + 1}]</sup>
+          <span>${escHtml(item.label)}</span>`;
+        card.appendChild(labelDiv);
+
+        const vizContainer = document.createElement('div');
+        vizContainer.className = 'viz-container';
+        vizContainer.id = `viz-${index}`;
+        card.appendChild(vizContainer);
+
+        embedsEl.appendChild(card);
+
+        // Render Vega-Lite chart
+        if (typeof vegaEmbed !== 'undefined') {
+          vegaEmbed(`#viz-${index}`, item.viz, {
+            actions: false,
+            renderer: 'svg',
+            theme: 'latimes'
+          }).then(() => {
+            console.log(`Viz ${index + 1} rendered ✔`);
+          }).catch(err => {
+            console.error(`Viz ${index + 1} error: ${err.message}`);
+            vizContainer.innerHTML = `<p style="color:#c0392b;font-size:0.75rem;padding:10px;">⚠️ Failed to render visualization</p>`;
+          });
+        } else {
+          vizContainer.innerHTML = `<p style="color:#c0392b;font-size:0.75rem;padding:10px;">⚠️ Vega-Embed not loaded</p>`;
+        }
+      });
+    }
+
+    /* ─── Setup Metric Hover Cards ─── */
+    async function setupMetricHoverCards() {
+      // Wait for Tableau Embedding API to load
+      await new Promise(resolve => {
+        if (customElements.get('tableau-viz')) {
+          resolve();
+        } else {
+          window.addEventListener('load', resolve);
+        }
+      });
+
+      // Log all registered Tableau components
+      const tableauComponents = ['tableau-viz', 'tableau-pulse-metric', 'tableau-pulse', 'tableau-metric'];
+      tableauComponents.forEach(comp => {
+        if (customElements.get(comp)) {
+          console.log(`${comp} is registered`);
+        } else {
+          console.error(`${comp} is NOT registered`);
+        }
+      });
+
+      // Create a popup container for metric cards
+      let popup = document.getElementById('metric-popup');
+      if (!popup) {
+        popup = document.createElement('div');
+        popup.id = 'metric-popup';
+        popup.className = 'metric-popup';
+        document.body.appendChild(popup);
+        console.log('Metric popup container created');
+      }
+
+      // Get JWT token for Pulse metrics (session tokens don't work with web component)
+      let token;
+      try {
+        const tokenRes = await fetch('/token');
+        const tokenData = await tokenRes.json();
+        token = tokenData.token;
+        console.log('JWT token fetched for metric cards');
+        console.log('Using JWT token for Pulse metrics, length:', token.length);
+      } catch (e) {
+        console.error('Failed to get JWT token:', e);
+        console.error('Token fetch failed: ' + e.message);
+        return;
+      }
+
+      // Find all metric links and add hover listeners
+      const metricLinks = document.querySelectorAll('.metric-link');
+      console.log(`Setting up hover for ${metricLinks.length} metric links`);
+
+      metricLinks.forEach((link, idx) => {
+        const metricId = link.getAttribute('data-metric-id');
+
+        link.addEventListener('mouseenter', (e) => {
+          console.log(`Hover on citation [${idx + 1}] - metric ${metricId}`);
+
+          // Clear previous content
+          popup.innerHTML = '';
+          popup.className = 'metric-popup show';
+
+          // Position popup near the cursor instead of the link
+          const rect = link.getBoundingClientRect();
+          const left = Math.max(10, rect.left - 200);
+          const top = Math.max(10, rect.bottom + 10);
+
+          popup.style.left = `${left}px`;
+          popup.style.top = `${top}px`;
+          popup.style.display = 'block';
+
+          console.log(`Popup positioned at (${left}, ${top})`);
+
+          // Check if tableau-pulse is registered
+          const componentName = 'tableau-pulse';
+          if (!customElements.get(componentName)) {
+            popup.innerHTML = '<div style="padding:20px;background:white;"><p style="color:red;">tableau-pulse component not registered</p></div>';
+            console.error('tableau-pulse NOT registered');
+            return;
+          }
+          console.log(`Using component: ${componentName}`);
+
+          // Show loading state
+          popup.innerHTML = '<div style="padding:20px;background:white;text-align:center;">Loading metric card...</div>';
+
+          // Create the metric element with working configuration
+          const metricCard = document.createElement(componentName);
+
+          // Use the URL format that works: /pulse/site/{site}/metrics/{id}
+          const metricUrl = `${TABLEAU_SERVER}/pulse/site/${TABLEAU_SITE}/metrics/${metricId}`;
+
+          // Set attributes that match the working example
+          metricCard.setAttribute('layout', 'card');
+          metricCard.setAttribute('src', metricUrl);
+          metricCard.setAttribute('token', token);
+
+          console.log(`Metric card created with: layout=card, src=${metricUrl.substring(0, 60)}...`);
+          console.log('Full metric URL:', metricUrl);
+          console.log('Token:', token.substring(0, 30) + '...');
+
+          // Add error handler
+          metricCard.addEventListener('error', (e) => {
+            console.error(`Metric card error: ${JSON.stringify(e.detail)}`);
+          });
+
+          // Add load handler
+          metricCard.addEventListener('firstinteractive', () => {
+            console.log('Metric card loaded successfully');
+          });
+
+          // Clear popup and add metric card
+          popup.innerHTML = '';
+          popup.appendChild(metricCard);
+
+          console.log(`Metric card element created: id=${metricId}, token=${token.substring(0, 20)}...`);
+
+          // Log the actual HTML
+          console.log('Metric card HTML:', metricCard.outerHTML);
+          console.log('Popup contents:', popup.innerHTML);
+          console.log('Popup in DOM:', document.body.contains(popup));
+          console.log('MetricCard in DOM:', document.body.contains(metricCard));
+
+          // Add a timeout to check if it rendered
+          setTimeout(() => {
+            const element = popup.querySelector(componentName);
+            console.log('After 1s, element:', element);
+            console.log('Has shadowRoot:', element ? element.shadowRoot : 'no element');
+            console.log('Element children:', element ? element.children.length : 'no element');
+
+            if (element && element.shadowRoot) {
+              console.log('Metric card has shadow DOM - rendering');
+              console.log('ShadowRoot HTML:', element.shadowRoot.innerHTML.substring(0, 500));
+
+              // Check the iframe
+              const iframe = element.shadowRoot.querySelector('iframe');
+              if (iframe) {
+                console.log('Iframe found:', {
+                  src: iframe.src,
+                  width: iframe.style.width,
+                  height: iframe.style.height,
+                  display: window.getComputedStyle(iframe).display,
+                  visibility: window.getComputedStyle(iframe).visibility
+                });
+                console.log(`Iframe in metric card: ${iframe.src ? 'has src' : 'no src'}`, iframe.src ? 'ok' : 'error');
+              } else {
+                console.error('No iframe found in shadowRoot');
+              }
+            } else {
+              console.error('Metric card has NO shadow DOM - not rendering');
+              popup.innerHTML = `<div style="padding:20px;background:white;font-size:14px;">
+                <p><strong>Diagnostic Info:</strong></p>
+                <p><strong>Component:</strong> ${componentName}</p>
+                <p><strong>Metric ID:</strong> ${metricId}</p>
+                <p><strong>Token (first 30):</strong> ${token.substring(0, 30)}...</p>
+                <p><strong>Element exists:</strong> ${element ? 'Yes' : 'No'}</p>
+                <p><strong>Has shadowRoot:</strong> ${element && element.shadowRoot ? 'Yes' : 'No'}</p>
+                <p><strong>innerHTML:</strong> ${element ? element.innerHTML.substring(0, 100) : 'N/A'}</p>
+                <p style="color:red;margin-top:10px;">Metric card component created but not rendering</p>
+                <p style="color:#666;font-size:12px;">The ${componentName} element was added to DOM but didn't render. This may mean the embedding API doesn't support Pulse metric embedding yet.</p>
+              </div>`;
+            }
+          }, 1500);
+        });
+
+        link.addEventListener('mouseleave', () => {
+          // Hide immediately since pointer-events is none
+          setTimeout(() => {
+            popup.className = 'metric-popup';
+            popup.style.display = 'none';
+            console.log('Popup hidden');
+          }, 200);
+        });
+      });
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* ─── Boot ─── */
+    window.addEventListener('load', () => {
+      console.log('Page loaded');
+      initViz();
+      runSummary();
+    });
+
+    /* ─── Expose functions to window for onclick handlers ─── */
+    window.openPromptDialog = openPromptDialog;
+    window.closePromptDialog = closePromptDialog;
+    window.submitPrompt = submitPrompt;
+    window.refreshSafetySummary = refreshSafetySummary;
+    window.toggleSafetyRaw = toggleSafetyRaw;
+    window.runSafetyRCA = runSafetyRCA;
+  </script>
+
+</body>
+</html>
