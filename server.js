@@ -1118,16 +1118,31 @@ ${formatIncident(incidents[0])}`;
 
 app.use(express.static(path.join(__dirname)));
 
-const options = {
-  key:  fs.readFileSync('key.pem'),
-  cert: fs.readFileSync('cert.pem')
-};
+// Use HTTPS locally, HTTP in production (Railway provides HTTPS)
+const PORT = process.env.PORT || 5500;
+const useHTTPS = fs.existsSync('key.pem') && fs.existsSync('cert.pem');
 
-https.createServer(options, app).listen(5500, () => {
-  console.log('Running at https://localhost:5500');
-  console.log('Diagnostics:');
-  console.log('  https://localhost:5500/debug-auth     ← probes POST variants');
-  console.log('  https://localhost:5500/mcp-tools      ← lists all MCP tools available');
-  console.log('  https://localhost:5500/session-token  ← REST token for browser use');
-  console.log('  https://localhost:5500/tableau-proxy/ ← CORS-safe Tableau API proxy');
-});
+if (useHTTPS) {
+  const options = {
+    key:  fs.readFileSync('key.pem'),
+    cert: fs.readFileSync('cert.pem')
+  };
+  https.createServer(options, app).listen(PORT, () => {
+    console.log(`Running at https://localhost:${PORT}`);
+    console.log('Diagnostics:');
+    console.log(`  https://localhost:${PORT}/debug-auth     ← probes POST variants`);
+    console.log(`  https://localhost:${PORT}/mcp-tools      ← lists all MCP tools available`);
+    console.log(`  https://localhost:${PORT}/session-token  ← REST token for browser use`);
+    console.log(`  https://localhost:${PORT}/tableau-proxy/ ← CORS-safe Tableau API proxy`);
+  });
+} else {
+  app.listen(PORT, () => {
+    console.log(`Running at http://localhost:${PORT}`);
+    console.log('(HTTPS certificates not found - using HTTP. Railway will provide HTTPS.)');
+    console.log('Diagnostics:');
+    console.log(`  http://localhost:${PORT}/debug-auth`);
+    console.log(`  http://localhost:${PORT}/mcp-tools`);
+    console.log(`  http://localhost:${PORT}/session-token`);
+    console.log(`  http://localhost:${PORT}/tableau-proxy/`);
+  });
+}
