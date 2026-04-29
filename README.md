@@ -8,31 +8,17 @@ Step-by-Step Setup
   2. Create .env File                                                                                                                                  
                                           
   cp .env.example .env                                                                                                                                 
-  Fill in all values (ask DevOps/admin for these):                                                                                                     
-                                                                                                                                                       
-  ┌──────────────────────┬───────────────────────────────────────────────────────────────┐                                                             
-  │       Variable       │                        Where to Get It                        │                                                             
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_CLIENT_ID    │ Tableau Server Admin → Connected Apps                         │                                                             
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_SECRET_ID    │ Same Connected App                                            │                                                             
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_SECRET_VALUE │ Same Connected App                                            │                                                             
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_USER         │ Email of the service account that owns the Connected App      │
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_SERVER       │ Your Tableau Cloud URL (e.g. https://10az.online.tableau.com) │
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_SITE         │ Site name from the Tableau URL                                │
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_API          │ API version (e.g. 3.21)                                       │
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_PAT_NAME     │ Personal Access Token name (for MCP)                          │
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ TABLEAU_PAT_VALUE    │ Personal Access Token value (for MCP)                         │
-  ├──────────────────────┼───────────────────────────────────────────────────────────────┤                                                             
-  │ SAFETY_METRIC_ID     │ UUID of the safety metric in Tableau Pulse                    │
-  └──────────────────────┴───────────────────────────────────────────────────────────────┘                                                             
+  Fill in all values (ask DevOps/admin for these):                                                                                                    - Variable / Where to Get It                                                                                                                        
+- TABLEAU_CLIENT_ID / Tableau Server Admin → Connected Apps                                                                                          
+- TABLEAU_SECRET_ID / Same Connected App                                                                                                              
+- TABLEAU_SECRET_VALUE / Same Connected App
+- TABLEAU_USER / Email of the service account that owns the Connected App                                                  
+- TABLEAU_SERVER / Your Tableau Cloud URL (e.g. https://10az.online.tableau.com)                                                          
+- TABLEAU_SITE / Site name from the Tableau URL
+- TABLEAU_API / API version (e.g. 3.21)                                                        
+- TABLEAU_PAT_NAME / Personal Access Token name (for MCP)                                                         
+- TABLEAU_PAT_VALUE / Personal Access Token value (for MCP)                                                         
+- SAFETY_METRIC_ID / UUID of the safety metric in Tableau Pulse                                                          
                                           
   3. Generate SSL Certificates (dev only)                                                                                                              
                                           
