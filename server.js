@@ -427,6 +427,13 @@ function filterMetricPayload(rawText, watchlist) {
 // ── /watched-metrics ──────────────────────────────────────────────────────────
 app.get('/watched-metrics', (req, res) => res.json({ metricIds: WATCHED_METRICS }));
 
+// ── /config — expose non-secret env vars to the client ───────────────────────
+app.get('/config', (req, res) => res.json({
+  tableauServer:    TABLEAU_SERVER,
+  tableauSite:      TABLEAU_SITE,
+  safetyMetricId:   SAFETY_METRIC_ID
+}));
+
 // ── /token ────────────────────────────────────────────────────────────────────
 app.get('/token', (req, res) => res.json({ token: generateJWT() }));
 
@@ -502,6 +509,17 @@ app.all('/tableau-proxy/*path', async (req, res) => {
       targetURL,
       hint:      'Check server.js terminal — targetURL and cause are logged above.'
     });
+  }
+});
+
+// ── /debug-safety-fields (temp) ──────────────────────────────────────────────
+app.get('/debug-safety-fields', async (req, res) => {
+  try {
+    const result = await callMCPTool('get-datasource-metadata', { datasourceLuid: SAFETY_DATASOURCE_LUID });
+    const text = result.map(c => c.text || JSON.stringify(c)).join('\n');
+    res.type('text').send(text);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -870,6 +888,103 @@ async function callPulseBriefDirect(session, metricIds, content) {
   return briefRes.json();
 }
 
+async function callPulseSpringboardFiltered(session, metricId, marketArea, allowedDimensions = null) {
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept:         'application/json',
+    'X-Tableau-Auth': session.token
+  };
+
+  // Fetch metric + definition to build the full input shape
+  const metricsRes = await fetch(`${TABLEAU_SERVER}/api/-/pulse/metrics:batchGet`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ metric_ids: [metricId] })
+  });
+  if (!metricsRes.ok) throw new Error(`metrics:batchGet HTTP ${metricsRes.status}`);
+  const metrics = (await metricsRes.json()).metrics || [];
+  if (!metrics.length) throw new Error('No metric returned');
+  const metric = metrics[0];
+
+  const defsRes = await fetch(`${TABLEAU_SERVER}/api/-/pulse/definitions:batchGet`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ definition_ids: [metric.definition_id] })
+  });
+  if (!defsRes.ok) throw new Error(`definitions:batchGet HTTP ${defsRes.status}`);
+  const definitions = (await defsRes.json()).definitions || [];
+  if (!definitions.length) throw new Error('No definition returned');
+  const def = definitions[0];
+
+  // Clone metric spec and inject the market area filter
+  const spec = JSON.parse(JSON.stringify(metric.specification));
+  spec.filters = spec.filters || [];
+  spec.filters.push({
+    field:             'market_area',
+    operator:          'OPERATOR_EQUAL',
+    categorical_values: [{ string_value: marketArea }]
+  });
+  if (spec.comparison?.comparison_period_override?.length === 0) {
+    delete spec.comparison.comparison_period_override;
+  }
+
+  const extOpts = JSON.parse(JSON.stringify(def.extension_options));
+  if (allowedDimensions) {
+    // Use the caller-specified dimension list, but always keep market_area for the filter to work
+    extOpts.allowed_dimensions = [...new Set([...allowedDimensions, 'market_area'])];
+  } else if (!extOpts.allowed_dimensions.includes('market_area')) {
+    extOpts.allowed_dimensions.push('market_area');
+  }
+
+  const repOpts = JSON.parse(JSON.stringify(def.representation_options));
+  delete repOpts.positive_only;
+  if (repOpts.type === 'NUMBER_FORMAT_TYPE_NUMBER') {
+    if (!repOpts.number_units) repOpts.number_units = { singular_noun: '', plural_noun: '' };
+    if (repOpts.currency_code === 'CURRENCY_CODE_UNSPECIFIED') delete repOpts.currency_code;
+  }
+
+  const payload = {
+    bundle_request: {
+      version: 1,
+      options: {
+        output_format: 'OUTPUT_FORMAT_TEXT',
+        time_zone:     'America/New_York',
+        language:      'LANGUAGE_EN_US',
+        locale:        'LOCALE_EN_US'
+      },
+      input: {
+        metadata: {
+          name:          def.metadata.name,
+          metric_id:     metric.id,
+          definition_id: metric.definition_id
+        },
+        metric: {
+          definition: {
+            datasource:          def.specification.datasource,
+            basic_specification: def.specification.basic_specification,
+            is_running_total:    def.specification.is_running_total
+          },
+          metric_specification:   spec,
+          extension_options:      extOpts,
+          representation_options: repOpts,
+          insights_options:       def.insights_options,
+          candidates:             []
+        }
+      }
+    }
+  };
+
+  const springboardRes = await fetch(`${TABLEAU_SERVER}/api/-/pulse/insights/springboard`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':   'application/vnd.tableau.pulse.insightsservice.v1.GenerateInsightBundleSpringboardRequest+json',
+      Accept:           'application/json',
+      'X-Tableau-Auth': session.token
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!springboardRes.ok) throw new Error(`insights/springboard HTTP ${springboardRes.status}: ${await springboardRes.text()}`);
+  return springboardRes.json();
+}
+
 // ── /safety-pulse-summary ─────────────────────────────────────────────────────
 app.get('/safety-pulse-summary', async (req, res) => {
   try {
@@ -930,30 +1045,177 @@ Structure your response as EXACTLY three items, nothing else:
     const cleaned  = stripCodeFences(raw_text);
 
     // Extract the machine-readable market area tag
-    const maMatch     = cleaned.match(/<market-area>(.*?)<\/market-area>/i);
+    const maMatch      = cleaned.match(/<market-area>(.*?)<\/market-area>/i);
     const topMarketArea = maMatch ? maMatch[1].trim() : null;
-    const summary     = cleaned.replace(/<market-area>.*?<\/market-area>/i, '').trim();
+    const summary      = cleaned.replace(/<market-area>.*?<\/market-area>/i, '').trim();
 
-    res.json({ summary, topMarketArea, raw: briefBody });
+    // Fetch filtered Pulse insights for the top market area
+    let filteredSummary = null;
+    if (topMarketArea && topMarketArea !== 'unknown') {
+      try {
+        // First call: general springboard filtered to market area
+        const springboard = await callPulseSpringboardFiltered(session, SAFETY_METRIC_ID, topMarketArea);
+        const bundle      = springboard.bundle_response?.result || springboard;
+        const insights    = bundle.insights || bundle.springboard_insights || [];
+        const springboardText = insights
+          .map(i => i.markup || i.result?.markup || i.viz?.markup || '')
+          .filter(Boolean).join('\n\n') || JSON.stringify(bundle).substring(0, 1000);
+
+        // Second call: BAN bundle — returns top insight per filterable dimension incl. ROOT_CAUSE
+        let rootCauseText = '';
+        try {
+          const metric = (await (await fetch(`${TABLEAU_SERVER}/api/-/pulse/metrics:batchGet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Tableau-Auth': session.token },
+            body: JSON.stringify({ metric_ids: [SAFETY_METRIC_ID] })
+          })).json()).metrics?.[0];
+
+          const def = (await (await fetch(`${TABLEAU_SERVER}/api/-/pulse/definitions:batchGet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Tableau-Auth': session.token },
+            body: JSON.stringify({ definition_ids: [metric.definition_id] })
+          })).json()).definitions?.[0];
+
+          const spec = JSON.parse(JSON.stringify(metric.specification));
+          spec.filters = spec.filters || [];
+          spec.filters.push({ field: 'market_area', operator: 'OPERATOR_EQUAL', categorical_values: [{ string_value: topMarketArea }] });
+          if (spec.comparison?.comparison_period_override?.length === 0) delete spec.comparison.comparison_period_override;
+
+          const extOpts = JSON.parse(JSON.stringify(def.extension_options));
+          // Put ROOT_CAUSE first so the detail bundle's breakdown group targets it
+          const rcDim = extOpts.allowed_dimensions.find(d => d.toLowerCase().includes('root_cause') || d.toLowerCase() === 'root cause');
+          if (rcDim) {
+            extOpts.allowed_dimensions = [rcDim, ...extOpts.allowed_dimensions.filter(d => d !== rcDim)];
+          }
+          if (!extOpts.allowed_dimensions.includes('market_area')) extOpts.allowed_dimensions.push('market_area');
+
+          const repOpts = JSON.parse(JSON.stringify(def.representation_options));
+          delete repOpts.positive_only;
+          if (repOpts.type === 'NUMBER_FORMAT_TYPE_NUMBER') {
+            if (!repOpts.number_units) repOpts.number_units = { singular_noun: '', plural_noun: '' };
+            if (!repOpts.currency_code) repOpts.currency_code = 'CURRENCY_CODE_UNSPECIFIED';
+          }
+
+          const banPayload = {
+            bundle_request: {
+              version: 1,
+              options: { output_format: 'OUTPUT_FORMAT_TEXT', time_zone: 'America/New_York', language: 'LANGUAGE_EN_US', locale: 'LOCALE_EN_US' },
+              input: {
+                metadata: { name: def.metadata.name, metric_id: metric.id, definition_id: metric.definition_id },
+                metric: {
+                  definition: { datasource: def.specification.datasource, basic_specification: def.specification.basic_specification, is_running_total: def.specification.is_running_total },
+                  metric_specification:   spec,
+                  extension_options:      extOpts,
+                  representation_options: repOpts,
+                  insights_options:       def.insights_options,
+                  candidates:             []
+                }
+              }
+            }
+          };
+
+          const banRes = await callMCPTool('generate-pulse-metric-value-insight-bundle', {
+            bundleRequest: banPayload,
+            bundleType:    'detail'
+          });
+          const banText = banRes.map(c => c.text || JSON.stringify(c)).join('\n');
+
+          let banParsed;
+          try { banParsed = JSON.parse(banText); } catch { banParsed = null; }
+          if (banParsed) {
+            const banBundle   = banParsed.bundle_response?.result || banParsed;
+            const banGroups   = banBundle.insight_groups || [];
+            const sourceGroup = banGroups.find(g => g.type === 'breakdown');
+            rootCauseText     = (sourceGroup?.insights || [])
+              .map(i => i.result?.markup || i.markup || '').filter(Boolean).join('\n\n');
+          }
+        } catch (e) {
+          console.warn('BAN bundle root cause failed:', e.message);
+        }
+
+        const fullFilteredContext = [
+          springboardText,
+          rootCauseText ? `\n\n=== ROOT CAUSE BREAKDOWN ===\n${rootCauseText}` : ''
+        ].join('');
+
+        const filteredResponse = await anthropic.messages.create({
+          model:      'us.anthropic.claude-opus-4-5-20251101-v1:0',
+          max_tokens: 300,
+          system:     `You are a safety analyst for Hertz. You receive Tableau Pulse insight data filtered to a single market area.
+Output valid HTML only. Allowed tags: <p> <strong> <em>. No markdown, no code fences, no other tags.
+Structure your response as EXACTLY three items, nothing else:
+1. One <p> — one sentence capturing the single most important metric or trend for this market area, with a specific number.
+2. One <p> starting with <strong>Top Root Cause:</strong> followed by the name of the highest-contributing root cause and its specific incident count or share. Use data from the ROOT CAUSE BREAKDOWN section if present. If no root cause data is available, write <strong>Top Root Cause:</strong> Not available.
+3. One machine-readable tag on its own line: <top-root-cause>EXACT ROOT CAUSE NAME HERE</top-root-cause> — the exact root cause value from the data, or "unknown" if not available. This tag will be stripped from the display.`,
+          messages: [{
+            role:    'user',
+            content: `Extract the key insight and top root cause for the "${topMarketArea}" market area:\n\n${fullFilteredContext}`
+          }]
+        });
+
+        const raw_filtered = stripCodeFences(filteredResponse.content.find(b => b.type === 'text')?.text || '');
+        const rcTagMatch   = raw_filtered.match(/<top-root-cause>(.*?)<\/top-root-cause>/i);
+        filteredSummary    = {
+          html:         raw_filtered.replace(/<top-root-cause>.*?<\/top-root-cause>/i, '').trim(),
+          topRootCause: rcTagMatch ? rcTagMatch[1].trim() : null
+        };
+      } catch (e) {
+        console.warn('Filtered springboard failed:', e.message);
+        filteredSummary = { html: `<p><em>Could not load filtered insights: ${e.message}</em></p>`, topRootCause: null };
+      }
+    }
+
+    res.json({ summary, topMarketArea, filteredSummary, raw: briefBody });
   } catch (e) {
     console.error('/safety-pulse-summary error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── /safety-incidents — serve CSV as JSON ────────────────────────────────────
-app.get('/safety-incidents', (req, res) => {
-  const csvPath = path.join(__dirname, 'Safety_Production_Mock_2.csv');
+const SAFETY_DATASOURCE_LUID = process.env.SAFETY_DATASOURCE_LUID;
+
+// ── /safety-incidents — fetch from Tableau SafetyData datasource via MCP ─────
+app.get('/safety-incidents', async (req, res) => {
   try {
-    const raw = fs.readFileSync(csvPath, 'utf8');
-    const lines = raw.split('\n').filter(l => l.trim());
-    const headers = parseCSVLine(lines[0]);
-    const records = lines.slice(1).map(line => {
-      const vals = parseCSVLine(line);
-      const obj = {};
-      headers.forEach((h, i) => { obj[h] = (vals[i] || '').trim(); });
-      return obj;
-    }).filter(r => r.Incident_number);
+    const result = await callMCPTool('query-datasource', {
+      datasourceLuid: SAFETY_DATASOURCE_LUID,
+      query: {
+        fields: [
+          { fieldCaption: 'Incident number' },
+          { fieldCaption: 'Division' },
+          { fieldCaption: 'Zone' },
+          { fieldCaption: 'Market Area' },
+          { fieldCaption: 'Location Name' },
+          { fieldCaption: 'Facility Type' },
+          { fieldCaption: 'Description Of Location' },
+          { fieldCaption: 'Date of incident' },
+          { fieldCaption: 'Time Of Incident' },
+          { fieldCaption: 'Involved Employee Id' },
+          { fieldCaption: 'Involved Employee Title' },
+          { fieldCaption: 'Incident Type' },
+          { fieldCaption: 'Was A Motor Vehicle Involved' },
+          { fieldCaption: 'Date Reported' },
+          { fieldCaption: 'How Did The Injury Occur' },
+          { fieldCaption: 'What Was The Injury Or Illness' },
+          { fieldCaption: 'Description Of Incident' },
+          { fieldCaption: 'Root Cause' },
+          { fieldCaption: 'Initial Root Cause' },
+          { fieldCaption: 'Why_Did_This_Occur__Why' },
+          { fieldCaption: 'Why_Did_This_Occur__Why1' }
+        ]
+      }
+    });
+    const text = result.map(c => c.text || JSON.stringify(c)).join('\n');
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error(`Tableau MCP query failed: ${text.substring(0, 300)}`);
+    }
+    if (parsed.error || parsed.isError) throw new Error(parsed.error || parsed.message || JSON.stringify(parsed));
+    console.log('SafetyData MCP response shape:', JSON.stringify(parsed).substring(0, 500));
+    const rows = parsed.data ?? parsed.rows ?? parsed.results ?? parsed;
+    const records = Array.isArray(rows) ? rows.filter(r => r['Incident number']) : [];
     res.json(records);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -980,45 +1242,69 @@ function parseCSVLine(line) {
 
 // ── /safety-rca — root cause analysis for a specific market area ──────────────
 app.get('/safety-rca', async (req, res) => {
-  const { marketArea } = req.query;
+  const { marketArea, rootCause } = req.query;
   if (!marketArea) return res.status(400).json({ error: 'marketArea query param required' });
 
-  const csvPath = path.join(__dirname, 'Safety_Production_Mock_2.csv');
   try {
-    const raw     = fs.readFileSync(csvPath, 'utf8');
-    const lines   = raw.split('\n').filter(l => l.trim());
-    const headers = parseCSVLine(lines[0]);
-    const records = lines.slice(1).map(line => {
-      const vals = parseCSVLine(line);
-      const obj  = {};
-      headers.forEach((h, i) => { obj[h] = (vals[i] || '').trim(); });
-      return obj;
-    }).filter(r => r.Incident_number);
-
-    // Current-month boundaries (server local time)
     const now        = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const tomorrow   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const quarter    = Math.ceil((now.getMonth() + 1) / 3);
+    const periodLabel = `Q${quarter} ${now.getFullYear()}`;
 
-    // Filter to the market area AND current month (Date_of_incident is M/D/YYYY)
-    const filtered = records.filter(r => {
-      if (r.market_area?.trim().toLowerCase() !== marketArea.trim().toLowerCase()) return false;
-      const d = new Date(r.Date_of_incident);
-      return !isNaN(d) && d >= monthStart && d < tomorrow;
+    const result = await callMCPTool('query-datasource', {
+      datasourceLuid: SAFETY_DATASOURCE_LUID,
+      query: {
+        fields: [
+          { fieldCaption: 'Incident number' },
+          { fieldCaption: 'Initial Root Cause' },
+          { fieldCaption: 'Why_Did_This_Occur__Why' },
+          { fieldCaption: 'Why_Did_This_Occur__Why1' }
+        ],
+        filters: [
+          {
+            field: { fieldCaption: 'Market Area' },
+            filterType: 'SET',
+            values: [marketArea],
+            exclude: false
+          },
+          ...(rootCause ? [{
+            field: { fieldCaption: 'Root Cause' },
+            filterType: 'SET',
+            values: [rootCause],
+            exclude: false
+          }] : []),
+          {
+            field: { fieldCaption: 'New Date' },
+            filterType: 'DATE',
+            periodType: 'QUARTERS',
+            dateRangeType: 'CURRENT'
+          }
+        ]
+      }
     });
 
-    const monthLabel = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    if (!filtered.length) {
-      return res.status(404).json({ error: `No incidents found for "${marketArea}" in ${monthLabel}` });
+    const text = result.map(c => c.text || JSON.stringify(c)).join('\n');
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error(`Tableau MCP query failed: ${text.substring(0, 300)}`);
+    }
+    if (parsed.error || parsed.isError) throw new Error(parsed.error || parsed.message || JSON.stringify(parsed));
+    console.log('SafetyData RCA MCP response shape:', JSON.stringify(parsed).substring(0, 500));
+    const rows = parsed.data ?? parsed.rows ?? parsed.results ?? parsed;
+    const records = Array.isArray(rows) ? rows.filter(r => r['Incident number']) : [];
+
+    if (!records.length) {
+      return res.status(404).json({ error: `No incidents found for "${marketArea}" in ${periodLabel}` });
     }
 
     // Extract the three root cause text fields
-    const rcaEntries = filtered
+    const rcaEntries = records
       .map(r => ({
-        incident: r.Incident_number,
-        initial:  r.INITIAL_ROOT_CAUSE?.trim(),
-        why:      r.WHY_DID_THIS_OCCUR__WHY?.trim(),
-        why1:     r.WHY_DID_THIS_OCCUR__WHY1?.trim()
+        incident: r['Incident number'],
+        initial:  r['Initial Root Cause']?.trim(),
+        why:      r['Why_Did_This_Occur__Why']?.trim(),
+        why1:     r['Why_Did_This_Occur__Why1']?.trim()
       }))
       .filter(r => r.initial || r.why || r.why1);
 
@@ -1039,20 +1325,102 @@ Be concise. Structure your response as:
 2. <h3>Recommended Focus</h3> — a single <p> of 2–3 sentences identifying the single highest-priority systemic issue and what action should be taken first.`,
       messages: [{
         role:    'user',
-        content: `These are root cause fields (INITIAL_ROOT_CAUSE, WHY_DID_THIS_OCCUR__WHY, WHY_DID_THIS_OCCUR__WHY1) from ${rcaEntries.length} safety incidents in the "${marketArea}" market area. Identify the key areas of investigation:\n\n${incidentText}`
+        content: `These are root cause fields (INITIAL_ROOT_CAUSE, WHY_DID_THIS_OCCUR__WHY, WHY_DID_THIS_OCCUR__WHY1) from ${rcaEntries.length} safety incidents in the "${marketArea}" market area${rootCause ? ` filtered to root cause "${rootCause}"` : ''}. Identify the key areas of investigation:\n\n${incidentText}`
       }]
     });
 
-    const text = response.content.find(b => b.type === 'text')?.text || '';
+    const llmText = response.content.find(b => b.type === 'text')?.text || '';
     res.json({
-      analysis:        stripCodeFences(text),
+      analysis:        stripCodeFences(llmText),
       marketArea,
-      monthLabel,
-      totalIncidents:  filtered.length,
-      recordsAnalyzed: rcaEntries.length
+      rootCause:       rootCause || null,
+      periodLabel,
+      totalIncidents:  records.length,
+      recordsAnalyzed: rcaEntries.length,
+      usage:           response.usage
     });
   } catch (e) {
     console.error('/safety-rca error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── /safety-full-rca — full dataset RCA, Claude finds top market area ─────────
+app.get('/safety-full-rca', async (req, res) => {
+  try {
+    const now         = new Date();
+    const quarter     = Math.ceil((now.getMonth() + 1) / 3);
+    const periodLabel = `Q${quarter} ${now.getFullYear()}`;
+
+    const result = await callMCPTool('query-datasource', {
+      datasourceLuid: SAFETY_DATASOURCE_LUID,
+      query: {
+        fields: [
+          { fieldCaption: 'Incident number' },
+          { fieldCaption: 'Market Area' },
+          { fieldCaption: 'Initial Root Cause' },
+          { fieldCaption: 'Why_Did_This_Occur__Why' },
+          { fieldCaption: 'Why_Did_This_Occur__Why1' }
+        ],
+        filters: [
+          {
+            field: { fieldCaption: 'New Date' },
+            filterType: 'DATE',
+            periodType: 'QUARTERS',
+            dateRangeType: 'CURRENT'
+          }
+        ]
+      }
+    });
+
+    const text = result.map(c => c.text || JSON.stringify(c)).join('\n');
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error(`Tableau MCP query failed: ${text.substring(0, 300)}`);
+    }
+    if (parsed.error || parsed.isError) throw new Error(parsed.error || parsed.message || JSON.stringify(parsed));
+
+    const rows    = parsed.data ?? parsed.rows ?? parsed.results ?? parsed;
+    const records = Array.isArray(rows) ? rows.filter(r => r['Incident number']) : [];
+
+    if (!records.length) {
+      return res.status(404).json({ error: `No incidents found for ${periodLabel}` });
+    }
+
+    const incidentText = records.map(r =>
+      `Incident ${r['Incident number']} — Market Area: ${r['Market Area'] || 'Unknown'}\n` +
+      (r['Initial Root Cause']         ? `  Initial Root Cause: ${r['Initial Root Cause']}\n`             : '') +
+      (r['Why_Did_This_Occur__Why']    ? `  Why It Occurred: ${r['Why_Did_This_Occur__Why']}\n`           : '') +
+      (r['Why_Did_This_Occur__Why1']   ? `  Further Why: ${r['Why_Did_This_Occur__Why1']}\n`              : '')
+    ).join('\n');
+
+    const response = await anthropic.messages.create({
+      model:      'us.anthropic.claude-opus-4-5-20251101-v1:0',
+      max_tokens: 1500,
+      system:     `You are a workplace safety analyst for Hertz. You analyze safety incident data across all market areas to identify systemic risks.
+Output valid HTML only. Allowed tags: <h3> <ul> <li> <p> <strong> <em>. No markdown, no code fences, no other tags.
+Structure your response as:
+1. <h3>Highest-Incident Market Area</h3> — a <p> naming the market area with the most incidents this quarter and its count.
+2. <h3>Top Root Cause</h3> — a <p> naming the single most common root cause across that market area's incidents and how many incidents it accounts for.
+3. <h3>Key Investigation Areas</h3> — a <ul> of 3–5 <li> items identifying recurring root cause themes across that market area's incidents, with approximate incident counts.
+4. <h3>Recommended Focus</h3> — a single <p> of 2–3 sentences identifying the single highest-priority systemic issue and what action should be taken first.`,
+      messages: [{
+        role:    'user',
+        content: `These are ${records.length} safety incidents across all market areas for ${periodLabel}. First identify which market area has the most incidents, then identify the top root cause issue in that market area, then perform a full root cause analysis on those incidents:\n\n${incidentText}`
+      }]
+    });
+
+    const llmText = response.content.find(b => b.type === 'text')?.text || '';
+    res.json({
+      analysis:        stripCodeFences(llmText),
+      periodLabel,
+      recordsAnalyzed: records.length,
+      usage:           response.usage
+    });
+  } catch (e) {
+    console.error('/safety-full-rca error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
