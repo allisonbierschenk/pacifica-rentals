@@ -484,6 +484,8 @@ app.all('/tableau-proxy/*path', async (req, res) => {
 
     console.log(`Proxy response: HTTP ${upstream.status} — ${body.length} chars`);
 
+    if (upstream.status === 401) tableauSession = null;
+
     res
       .status(upstream.status)
       .type(upstream.headers.get('content-type') || 'application/json')
