@@ -161,9 +161,9 @@ async function getMCPClient() {
   }
   mcpConnecting = true;
   try {
-    const { Client }             = await import('@modelcontextprotocol/sdk/client/index.js');
-    const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
-    const transport = new SSEClientTransport(new URL('http://localhost:3100/sse'));
+    const { Client }                        = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const transport = new StreamableHTTPClientTransport(new URL(process.env.MCP_SERVER_URL || 'http://localhost:3100/mcp'));
     const client    = new Client({ name: 'hertz-portal', version: '1.0.0' }, { capabilities: {} });
     await client.connect(transport);
     mcpClient = client;
