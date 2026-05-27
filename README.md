@@ -46,7 +46,7 @@ Fill in every value. **Never commit this file** — it's already in `.gitignore`
 ## Run it
 
 ```bash
-./start.sh
+npm run start
 ```
 
 This launches two processes:
