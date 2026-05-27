@@ -69,10 +69,7 @@ Tableau Cloud (JWT-authenticated)
 
 ## 4. Stop the server
 
-When you are done - stop the server or close the terminal window
-```bash
-Ctrl+C
-```
+When you are done, press `Ctrl+C` in the terminal — or just close the terminal window.
 
 ---
 
