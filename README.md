@@ -1,8 +1,10 @@
 # Pacifica Rentals — Tableau Pulse Demo
 
-An Express + Claude demo that pulls live metrics from **Tableau Pulse** through an MCP proxy and renders an executive briefing in the browser.
+A single-page ops portal: Pulse metrics up top, an AI-written safety narrative in the middle, and a one-click drill into the incidents driving it — all served from Tableau, no external LLM.
 
-> Already have your dev environment set up? Skip ahead to **[Run it](#run-it)**. If not, see the separate dev-bootstrap demo first.
+**Stack:** Node + Express · Tableau Connected App JWT · Pulse Insights API · VizQL Data Service · Tableau Embedding API v3
+
+> New laptop? Run the dev-bootstrap demo first. Otherwise skip to **[Run it](#run-it)**.
 
 ---
 
@@ -10,7 +12,7 @@ An Express + Claude demo that pulls live metrics from **Tableau Pulse** through 
 
 | File | Purpose |
 | --- | --- |
-| `server.js` | Express server. Mints a Tableau JWT, talks to Claude + the MCP proxy, serves the UI. |
+| `server.js` | Express server. Mints the Tableau JWT, calls Pulse + VizQL DS REST, serves the UI. |
 | `index.html` | Single-page UI for the brief. |
 | `pulse-brief-utils.js` | Helpers used by the brief renderer. |
 | `start.sh` | Boots the Express server on `:5500` and opens the browser. |
@@ -68,7 +70,7 @@ Tableau Cloud (JWT-authenticated)
   └── VizQL Data Service API → row-level incident queries
 ```
 
-The Express server mints a short-lived JWT for the Tableau Connected App, calls Pulse Insights for the AI-generated narratives, and uses VizQL Data Service for row-level incident data. No external LLM, no MCP — Pulse already does the AI summarization on Tableau's side.
+The Express server mints a short-lived JWT for the Tableau Connected App, calls Pulse Insights for the AI-generated narratives, and uses VizQL Data Service for row-level incident data. The AI summarization happens inside Tableau Pulse itself — there's no external LLM, no API keys, and no MCP proxy.
 
 ---
 
@@ -98,8 +100,8 @@ pacifica-rentals/
 ├── architecture.html          # Static architecture diagram
 ├── index.html                 # Brief UI
 ├── pulse-brief-utils.js       # Brief renderer helpers
-├── server.js                  # Express server + Claude + MCP client
-├── start.sh                   # Boots MCP proxy + Express
+├── server.js                  # Express server, Tableau JWT, Pulse + VizQL DS REST
+├── start.sh                   # Boots Express and opens the browser
 ├── Safety_Production_Mock_2.csv
 ├── .env.example               # Template — copy to .env
 ├── package.json
