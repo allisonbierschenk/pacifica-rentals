@@ -50,11 +50,6 @@ npm run start
 
 The Express server starts on **http://localhost:5500**
 
-Stop the server
-```bash
-Ctrl+C
-```
-
 ---
 
 ## 3. How it fits together
@@ -72,15 +67,23 @@ Tableau Cloud (JWT-authenticated)
 ```
 ---
 
-## 4. Security notes
+## 4. Stop the server
+
+When you are done - stop the server or close the terminal window
+```bash
+Ctrl+C
+```
+
+---
+
+## 5. Security notes
 
 - `.env`, `*.pem`, `*.key`, and `*.crt` are gitignored. **Do not commit secrets.**
 - The Tableau Connected App secret gives wide access — rotate it if it ever lands in a commit, screenshot, or chat thread.
 - The self-signed cert is for **local development only**. Don't reuse it for anything reachable from the internet.
 
 ---
-
-## 5. Repo layout
+## 6. Repo layout
 
 ```
 pacifica-rentals/
