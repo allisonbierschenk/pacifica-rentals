@@ -4,8 +4,6 @@ A single-page ops portal: Pulse metrics up top, an AI-written safety narrative i
 
 **Stack:** Node + Express · Tableau Connected App JWT · Pulse Insights API · VizQL Data Service · Tableau Embedding API v3
 
-> New laptop? Run the dev-bootstrap demo first. Otherwise skip to **[Run it](#run-it)**.
-
 ---
 
 ## What's in the box
