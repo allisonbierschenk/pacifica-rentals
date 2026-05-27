@@ -13,7 +13,7 @@ An Express + Claude demo that pulls live metrics from **Tableau Pulse** through 
 | `server.js` | Express server. Mints a Tableau JWT, talks to Claude + the MCP proxy, serves the UI. |
 | `index.html` | Single-page UI for the brief. |
 | `pulse-brief-utils.js` | Helpers used by the brief renderer. |
-| `start.sh` | Boots the MCP proxy on `:3100` and the Express server on `:5500`. |
+| `start.sh` | Boots the Express server on `:5500` and opens the browser. |
 | `.env.example` | Required environment variables — copy to `.env` and fill in. |
 
 ---
@@ -26,8 +26,6 @@ cp .env.example .env
 
 Fill in every value. **Never commit this file** — it's already in `.gitignore`.
 
-**Required:**
-
 | Variable | Where it comes from |
 | --- | --- |
 | `TABLEAU_CLIENT_ID` | Tableau → Settings → **Connected Apps** → your app |
@@ -38,15 +36,7 @@ Fill in every value. **Never commit this file** — it's already in `.gitignore`
 | `TABLEAU_SITE` | Site name from the Tableau URL |
 | `TABLEAU_API` | API version, e.g. `3.28` |
 | `SAFETY_METRIC_ID` | UUID of the safety metric in Tableau Pulse |
-| `SAFETY_DATASOURCE_LUID` | LUID of the safety datasource |
-| `MCP_SERVER_URL` | MCP endpoint (e.g. a hosted Tableau MCP). Leave blank to run a local proxy. |
-
-**Optional — only when `MCP_SERVER_URL` is blank** (the local Tableau MCP proxy needs them):
-
-| Variable | Where it comes from |
-| --- | --- |
-| `TABLEAU_PAT_NAME` | Tableau → Account Settings → **Personal Access Tokens** |
-| `TABLEAU_PAT_VALUE` | Same PAT, value shown once on creation |
+| `SAFETY_DATASOURCE_LUID` | LUID of the safety datasource (queried via VizQL Data Service) |
 
 ---
 
@@ -56,14 +46,11 @@ Fill in every value. **Never commit this file** — it's already in `.gitignore`
 npm run start
 ```
 
-This launches two processes:
+The Express server starts on **http://localhost:5500** and your browser opens automatically.
 
-- **MCP proxy** → `http://localhost:3100`
-- **Express server** → `https://localhost:5500`
+Stop with `Ctrl+C` — the trap in `start.sh` cleans up child processes.
 
-Open **https://localhost:5500** and accept the self-signed certificate warning.
-
-Stop both with `Ctrl+C` — the trap in `start.sh` cleans up child processes.
+> Want HTTPS? Run `openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"` and the next start will switch to HTTPS automatically.
 
 ---
 
@@ -73,16 +60,15 @@ Stop both with `Ctrl+C` — the trap in `start.sh` cleans up child processes.
 Browser (index.html)
         │
         ▼
-Express :5500 ──► Claude
+Express :5500
         │
         ▼
-Supergateway MCP proxy :3100 ──► Tableau MCP (Claude Desktop extension)
-        │
-        ▼
-Tableau Cloud (Pulse + REST API, JWT-authenticated)
+Tableau Cloud (JWT-authenticated)
+  ├── Pulse Insights API     → AI-written narrative summaries
+  └── VizQL Data Service API → row-level incident queries
 ```
 
-The Express server mints a short-lived JWT for the Tableau Connected App, asks Claude to summarize the metrics, and streams the result back to the page.
+The Express server mints a short-lived JWT for the Tableau Connected App, calls Pulse Insights for the AI-generated narratives, and uses VizQL Data Service for row-level incident data. No external LLM, no MCP — Pulse already does the AI summarization on Tableau's side.
 
 ---
 
@@ -90,10 +76,10 @@ The Express server mints a short-lived JWT for the Tableau Connected App, asks C
 
 | Symptom | Fix |
 | --- | --- |
-| `ENOENT: key.pem` on start | Generate certs (`openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes`), or delete the files to force HTTP. |
-| MCP proxy fails to start | Confirm Claude Desktop is installed and the path in `start.sh` (line 7) exists on your machine. |
-| Tableau auth failing | Hit `https://localhost:5500/debug-auth` for a JWT diagnostic dump. |
-| Port already in use | Make sure nothing else is on `5500` or `3100` (`lsof -i :5500`). |
+| Tableau auth failing | Hit `http://localhost:5500/debug-auth` for a JWT diagnostic dump. |
+| `vizql ... HTTP 4xx` | Confirm VizQL Data Service is enabled on your Tableau site and `SAFETY_DATASOURCE_LUID` is correct. |
+| Port already in use | Make sure nothing else is on `5500` (`lsof -i :5500`). |
+| HTTPS instead of HTTP | If `key.pem`/`cert.pem` exist in the repo root, the server uses HTTPS. Delete them to force HTTP. |
 
 ---
 

@@ -12,8 +12,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.29.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "uuid": "^14.0.0"
