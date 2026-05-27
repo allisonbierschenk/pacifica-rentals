@@ -1,12 +1,14 @@
 # Pacifica Rentals — Tableau Pulse Demo
 
-A single-page ops portal: Pulse metrics up top, an AI-written safety narrative in the middle, and a one-click drill into the incidents driving it — all served from Tableau, no external LLM.
+A single-page operations portal: Pulse metrics up top, an AI-written safety narrative in the middle, and a one-click drill into the incidents driving it — all served from Tableau, no external LLM.
 
 **Stack:** Node + Express · Tableau Connected App JWT · Pulse Insights API · VizQL Data Service · Tableau Embedding API v3
 
+The Express server mints a JWT for the Tableau Connected App, calls Pulse Insights for the AI-generated narratives, and uses VizQL Data Service for row-level incident data. The AI summarization happens inside Tableau Pulse itself — there's no external LLM, no API keys, and no MCP proxy.
+
 ---
 
-## What's in the box
+## What's in the code 
 
 | File | Purpose |
 | --- | --- |
@@ -18,7 +20,7 @@ A single-page ops portal: Pulse metrics up top, an AI-written safety narrative i
 
 ---
 
-## Configure your `.env`
+## 1. Configure your `.env`
 
 ```bash
 cp .env.example .env
@@ -40,21 +42,19 @@ Fill in every value. **Never commit this file** — it's already in `.gitignore`
 
 ---
 
-## Run it
+## 2. Run it
 
 ```bash
 npm run start
 ```
 
-The Express server starts on **http://localhost:5500** and your browser opens automatically.
+The Express server starts on **http://localhost:5500**
 
-Stop with `Ctrl+C` — the trap in `start.sh` cleans up child processes.
-
-> Want HTTPS? Run `openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"` and the next start will switch to HTTPS automatically.
+Stop with `Ctrl+c'
 
 ---
 
-## How it fits together
+## 3. How it fits together
 
 ```
 Browser (index.html)
@@ -67,23 +67,9 @@ Tableau Cloud (JWT-authenticated)
   ├── Pulse Insights API     → AI-written narrative summaries
   └── VizQL Data Service API → row-level incident queries
 ```
-
-The Express server mints a short-lived JWT for the Tableau Connected App, calls Pulse Insights for the AI-generated narratives, and uses VizQL Data Service for row-level incident data. The AI summarization happens inside Tableau Pulse itself — there's no external LLM, no API keys, and no MCP proxy.
-
 ---
 
-## Troubleshooting
-
-| Symptom | Fix |
-| --- | --- |
-| Tableau auth failing | Hit `http://localhost:5500/debug-auth` for a JWT diagnostic dump. |
-| `vizql ... HTTP 4xx` | Confirm VizQL Data Service is enabled on your Tableau site and `SAFETY_DATASOURCE_LUID` is correct. |
-| Port already in use | Make sure nothing else is on `5500` (`lsof -i :5500`). |
-| HTTPS instead of HTTP | If `key.pem`/`cert.pem` exist in the repo root, the server uses HTTPS. Delete them to force HTTP. |
-
----
-
-## Security notes
+## 4. Security notes
 
 - `.env`, `*.pem`, `*.key`, and `*.crt` are gitignored. **Do not commit secrets.**
 - The Tableau Connected App secret gives wide access — rotate it if it ever lands in a commit, screenshot, or chat thread.
@@ -91,7 +77,7 @@ The Express server mints a short-lived JWT for the Tableau Connected App, calls 
 
 ---
 
-## Repo layout
+## 5. Repo layout
 
 ```
 pacifica-rentals/
