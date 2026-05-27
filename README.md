@@ -50,7 +50,10 @@ npm run start
 
 The Express server starts on **http://localhost:5500**
 
-Stop with `Ctrl+c'
+Stop the server
+```bash
+Ctrl+C
+```
 
 ---
 
