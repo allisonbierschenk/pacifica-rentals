@@ -1,6 +1,8 @@
 # Pacifica Rentals — Tableau Pulse Demo
 
-An Express + Claude (via AWS Bedrock) demo that pulls live metrics from **Tableau Pulse** through an MCP proxy and renders an executive briefing in the browser.
+An Express + Claude demo that pulls live metrics from **Tableau Pulse** through an MCP proxy and renders an executive briefing in the browser.
+
+> Already have your dev environment set up? Skip ahead to **[Run it](#run-it)**. If not, see the separate dev-bootstrap demo first.
 
 ---
 
@@ -8,7 +10,7 @@ An Express + Claude (via AWS Bedrock) demo that pulls live metrics from **Tablea
 
 | File | Purpose |
 | --- | --- |
-| `server.js` | Express server. Mints a Tableau JWT, talks to Bedrock + the MCP proxy, serves the UI. |
+| `server.js` | Express server. Mints a Tableau JWT, talks to Claude + the MCP proxy, serves the UI. |
 | `index.html` | Single-page UI for the brief. |
 | `pulse-brief-utils.js` | Helpers used by the brief renderer. |
 | `start.sh` | Boots the MCP proxy on `:3100` and the Express server on `:5500`. |
@@ -16,29 +18,7 @@ An Express + Claude (via AWS Bedrock) demo that pulls live metrics from **Tablea
 
 ---
 
-## Prerequisites
-
-Install once on your machine:
-
-- **Node.js 20+** and `npm`
-- **OpenSSL** (ships with macOS / Linux)
-- **AWS CLI** with credentials that have Bedrock access in `us-west-2`
-- **Tableau Cloud** access with permission to create a **Connected App** and a **Personal Access Token**
-- **Claude Desktop** with the **Tableau MCP extension** installed (the local MCP path is referenced in `start.sh`)
-
----
-
-## Setup
-
-### 1. Clone and install
-
-```bash
-git clone https://github.com/allisonbierschenk/pacifica-rentals.git
-cd pacifica-rentals
-npm install
-```
-
-### 2. Create your `.env`
+## Configure your `.env`
 
 ```bash
 cp .env.example .env
@@ -60,33 +40,12 @@ Fill in every value. **Never commit this file** — it's already in `.gitignore`
 | `SAFETY_METRIC_ID` | UUID of the safety metric in Tableau Pulse |
 | `SAFETY_DATASOURCE_LUID` | LUID of the safety datasource |
 | `MCP_SERVER_URL` | MCP endpoint (defaults to `http://localhost:3100/mcp`) |
-| `AWS_REGION` | `us-west-2` |
-| `AWS_PROFILE` | Local AWS profile name with Bedrock access (e.g. `claude`) |
-
-### 3. Generate self-signed SSL certs (dev only)
-
-The server runs on **HTTPS** when `key.pem` and `cert.pem` are present in the repo root.
-
-```bash
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
-```
-
-If those files are missing, the server falls back to plain HTTP on the same port.
-
-### 4. Verify AWS Bedrock access
-
-```bash
-aws bedrock list-foundation-models --region us-west-2
-```
-
-You should see Claude models in the response. If not, your account lacks Bedrock access in `us-west-2` — fix that before continuing.
 
 ---
 
 ## Run it
 
 ```bash
-chmod +x start.sh
 ./start.sh
 ```
 
@@ -107,7 +66,7 @@ Stop both with `Ctrl+C` — the trap in `start.sh` cleans up child processes.
 Browser (index.html)
         │
         ▼
-Express :5500 ──► AWS Bedrock (Claude)
+Express :5500 ──► Claude
         │
         ▼
 Supergateway MCP proxy :3100 ──► Tableau MCP (Claude Desktop extension)
@@ -116,7 +75,7 @@ Supergateway MCP proxy :3100 ──► Tableau MCP (Claude Desktop extension)
 Tableau Cloud (Pulse + REST API, JWT-authenticated)
 ```
 
-The Express server mints a short-lived JWT for the Tableau Connected App, asks Claude (on Bedrock) to summarize the metrics, and streams the result back to the page.
+The Express server mints a short-lived JWT for the Tableau Connected App, asks Claude to summarize the metrics, and streams the result back to the page.
 
 ---
 
@@ -124,10 +83,9 @@ The Express server mints a short-lived JWT for the Tableau Connected App, asks C
 
 | Symptom | Fix |
 | --- | --- |
-| `ENOENT: key.pem` on start | Run the `openssl` command in step 3, or delete the files to force HTTP. |
+| `ENOENT: key.pem` on start | Generate certs (`openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes`), or delete the files to force HTTP. |
 | MCP proxy fails to start | Confirm Claude Desktop is installed and the path in `start.sh` (line 7) exists on your machine. |
 | Tableau auth failing | Hit `https://localhost:5500/debug-auth` for a JWT diagnostic dump. |
-| Claude/Bedrock errors | Re-run the `aws bedrock list-foundation-models` check; verify `AWS_PROFILE` is exported. |
 | Port already in use | Make sure nothing else is on `5500` or `3100` (`lsof -i :5500`). |
 
 ---
@@ -135,7 +93,7 @@ The Express server mints a short-lived JWT for the Tableau Connected App, asks C
 ## Security notes
 
 - `.env`, `*.pem`, `*.key`, and `*.crt` are gitignored. **Do not commit secrets.**
-- The Tableau Connected App secret and the AWS keys give wide access — rotate them if they ever land in a commit, screenshot, or chat thread.
+- The Tableau Connected App secret gives wide access — rotate it if it ever lands in a commit, screenshot, or chat thread.
 - The self-signed cert is for **local development only**. Don't reuse it for anything reachable from the internet.
 
 ---
@@ -147,7 +105,7 @@ pacifica-rentals/
 ├── architecture.html          # Static architecture diagram
 ├── index.html                 # Brief UI
 ├── pulse-brief-utils.js       # Brief renderer helpers
-├── server.js                  # Express server + Bedrock + MCP client
+├── server.js                  # Express server + Claude + MCP client
 ├── start.sh                   # Boots MCP proxy + Express
 ├── Safety_Production_Mock_2.csv
 ├── .env.example               # Template — copy to .env
