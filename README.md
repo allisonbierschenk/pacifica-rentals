@@ -26,6 +26,8 @@ cp .env.example .env
 
 Fill in every value. **Never commit this file** — it's already in `.gitignore`.
 
+**Required:**
+
 | Variable | Where it comes from |
 | --- | --- |
 | `TABLEAU_CLIENT_ID` | Tableau → Settings → **Connected Apps** → your app |
@@ -35,11 +37,16 @@ Fill in every value. **Never commit this file** — it's already in `.gitignore`
 | `TABLEAU_SERVER` | Your Tableau Cloud URL, e.g. `https://10az.online.tableau.com` |
 | `TABLEAU_SITE` | Site name from the Tableau URL |
 | `TABLEAU_API` | API version, e.g. `3.28` |
-| `TABLEAU_PAT_NAME` | Personal Access Token name (used by the MCP proxy) |
-| `TABLEAU_PAT_VALUE` | Personal Access Token value |
 | `SAFETY_METRIC_ID` | UUID of the safety metric in Tableau Pulse |
 | `SAFETY_DATASOURCE_LUID` | LUID of the safety datasource |
-| `MCP_SERVER_URL` | MCP endpoint (defaults to `http://localhost:3100/mcp`) |
+| `MCP_SERVER_URL` | MCP endpoint (e.g. a hosted Tableau MCP). Leave blank to run a local proxy. |
+
+**Optional — only when `MCP_SERVER_URL` is blank** (the local Tableau MCP proxy needs them):
+
+| Variable | Where it comes from |
+| --- | --- |
+| `TABLEAU_PAT_NAME` | Tableau → Account Settings → **Personal Access Tokens** |
+| `TABLEAU_PAT_VALUE` | Same PAT, value shown once on creation |
 
 ---
 
