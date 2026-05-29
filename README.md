@@ -26,6 +26,8 @@ The Express server mints a JWT for the Tableau Connected App, calls Pulse Insigh
 cp .env.example .env
 ```
 
+> ⚠️ Heads up: `cp .env.example .env` will **overwrite** an existing `.env` without prompting. If you already have a `.env` with values you want to keep, skip this step (or back it up first with `cp .env .env.bak`).
+
 Fill in every value. **Never commit this file** — it's already in `.gitignore`.
 
 | Variable | Where it comes from |
